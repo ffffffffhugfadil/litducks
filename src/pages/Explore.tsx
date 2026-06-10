@@ -11,7 +11,6 @@ import { CAMPAIGN_ABI } from '../config/contracts'
 
 type Filter = 'all' | 'live' | 'ended' | 'fcfs' | 'raffle'
 
-// Komponen wrapper untuk mendapatkan info campaign
 function CampaignItemWithData({ address, filter, onNameLoaded }: { 
   address: string; 
   filter: Filter;
@@ -37,14 +36,12 @@ function CampaignItemWithData({ address, filter, onNameLoaded }: {
   
   const isLoading = loadingMode || loadingActive || loadingName
   
-  // Kirim nama campaign ke parent untuk search
   useEffect(() => {
     if (name && !loadingName && onNameLoaded) {
       onNameLoaded(address, name as string)
     }
   }, [name, loadingName, address, onNameLoaded])
   
-  // Logika filter
   let shouldShow = true
   switch (filter) {
     case 'live':
@@ -78,7 +75,7 @@ export default function Explore() {
   const { factoryAddress } = useWalletStore()
   const { allCampaigns, loadingCampaigns } = useFactory()
   const [search, setSearch] = useState('')
-  const [searchType, setSearchType] = useState<'address' | 'name'>('name') // ✅ Default ke name
+  const [searchType, setSearchType] = useState<'address' | 'name'>('name')
   const [filter, setFilter] = useState<Filter>('all')
   const [currentPage, setCurrentPage] = useState(1)
   const [campaignNames, setCampaignNames] = useState<Map<string, string>>(new Map())
@@ -86,7 +83,6 @@ export default function Explore() {
 
   const campaigns = allCampaigns ?? []
 
-  // Kumpulkan nama campaign
   const handleNameLoaded = (address: string, name: string) => {
     setCampaignNames(prev => {
       if (prev.get(address) === name) return prev
@@ -96,12 +92,10 @@ export default function Explore() {
     })
   }
 
-  // Urutkan campaign (terbaru di atas)
   const sortedCampaigns = useMemo(() => {
     return [...campaigns].reverse()
   }, [campaigns])
 
-  // ✅ Filter berdasarkan search (address ATAU name)
   const filteredBySearch = useMemo(() => {
     if (!search) return sortedCampaigns
     
@@ -109,14 +103,12 @@ export default function Explore() {
       if (searchType === 'address') {
         return addr.toLowerCase().includes(search.toLowerCase())
       } else {
-        // Search by name
         const name = campaignNames.get(addr)?.toLowerCase() || ''
         return name.includes(search.toLowerCase())
       }
     })
   }, [sortedCampaigns, search, searchType, campaignNames])
 
-  // Pagination
   const totalPages = Math.ceil(filteredBySearch.length / itemsPerPage)
   const paginatedCampaigns = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage
@@ -124,7 +116,6 @@ export default function Explore() {
     return filteredBySearch.slice(start, end)
   }, [filteredBySearch, currentPage])
 
-  // Reset page ketika filter atau search berubah
   useEffect(() => {
     setCurrentPage(1)
   }, [search, searchType, filter])
@@ -163,45 +154,50 @@ export default function Explore() {
 
         {/* Search + Filters */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          {/* Search Input */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder={searchType === 'name' ? "Search by campaign name..." : "Search by address..."}
-              className="w-full pl-9 pr-24 py-2.5 bg-surface border border-border focus:border-primary rounded-lg text-sm text-text placeholder-text-secondary outline-none transition-colors"
+              placeholder={searchType === 'name' ? "Search by campaign name..." : "Search by wallet address..."}
+              className="w-full pl-9 pr-4 py-2.5 bg-surface border border-border focus:border-primary rounded-lg text-sm text-text placeholder-text-secondary outline-none transition-colors"
             />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-              <button
-                onClick={() => setSearchType('name')}
-                className={`px-2 py-1 rounded text-xs transition-colors ${
-                  searchType === 'name'
-                    ? 'bg-primary text-white'
-                    : 'bg-surface-2 text-text-secondary hover:text-text'
-                }`}
-              >
-                Name
-              </button>
-              <button
-                onClick={() => setSearchType('address')}
-                className={`px-2 py-1 rounded text-xs transition-colors ${
-                  searchType === 'address'
-                    ? 'bg-primary text-white'
-                    : 'bg-surface-2 text-text-secondary hover:text-text'
-                }`}
-              >
-                Address
-              </button>
-            </div>
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="absolute right-20 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
+
+          {/* Search Type Toggle - Dipisah dari input */}
+          <div className="flex items-center gap-1.5 bg-surface border border-border rounded-lg p-1">
+            <button
+              onClick={() => setSearchType('name')}
+              className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                searchType === 'name'
+                  ? 'bg-primary text-white'
+                  : 'text-text-secondary hover:text-text'
+              }`}
+            >
+              By Name
+            </button>
+            <button
+              onClick={() => setSearchType('address')}
+              className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                searchType === 'address'
+                  ? 'bg-primary text-white'
+                  : 'text-text-secondary hover:text-text'
+              }`}
+            >
+              By Address
+            </button>
+          </div>
+
+          {/* Filter Buttons */}
           <div className="flex items-center gap-1.5 bg-surface border border-border rounded-lg p-1">
             {filters.map(f => (
               <button
