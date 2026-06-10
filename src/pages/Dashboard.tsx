@@ -1,11 +1,10 @@
 // src/pages/Dashboard.tsx
-import { useAccount } from 'wagmi'
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
-import { useReadContract } from 'wagmi'
 import { FACTORY_ADDRESS, FACTORY_ABI } from '../config/contracts'  
 import { CAMPAIGN_ABI } from '../config/contracts'  
-import { Download, Trophy, Users, Calendar, ExternalLink, Loader2, PlusCircle } from 'lucide-react'
+import { Download, Trophy, Users, Calendar, ExternalLink, Loader2, PlusCircle, Zap } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import NetworkGuard from '../components/wallet/NetworkGuard'
 import { EXPLORER_URL } from '../lib/chain'
@@ -18,6 +17,7 @@ function shortAddr(addr: string) {
 function CampaignRow({ address, userAddress }: { address: string; userAddress: string }) {
   const [expanded, setExpanded] = useState(false)
 
+  // ============ READ CONTRACTS ============
   const { data: name } = useReadContract({
     address: address as `0x${string}`,
     abi: CAMPAIGN_ABI,
@@ -66,6 +66,18 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
     functionName: 'creator',
   })
 
+  const { data: selectionMode } = useReadContract({
+    address: address as `0x${string}`,
+    abi: CAMPAIGN_ABI,
+    functionName: 'selectionMode',
+  })
+
+  const { data: raffleRun } = useReadContract({
+    address: address as `0x${string}`,
+    abi: CAMPAIGN_ABI,
+    functionName: 'raffleRun',
+  })
+
   const { data: registrants } = useReadContract({
     address: address as `0x${string}`,
     abi: CAMPAIGN_ABI,
@@ -73,19 +85,39 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
     query: { enabled: expanded },
   })
 
+  // ============ WRITE CONTRACT ============
+  const { writeContract, data: txHash, isPending, error: writeError } = useWriteContract()
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
+
+  // ============ DATA PROCESSING ============
   const isOwner = creator && userAddress && creator.toLowerCase() === userAddress.toLowerCase()
+  const isRaffleMode = selectionMode === 1
+  const isRaffleCompleted = raffleRun === true
+  const deadlineNum = Number(deadline ?? 0)
+  const deadlineDate = deadlineNum > 0 ? new Date(deadlineNum * 1000) : null
+  const isPastDeadline = deadlineDate ? deadlineDate < new Date() : false
   
+  // ✅ Perbaiki: registrantCount adalah bigint, bandingkan dengan 0n
+  const hasRegistrants = registrantCount !== undefined && registrantCount !== 0n
+  const canRunRaffle = isOwner && isRaffleMode && isPastDeadline && isActive && !isRaffleCompleted && hasRegistrants
+
   if (!isOwner) return null
 
   const totalSlotsNum = Number(totalSlots ?? 0)
   const registered = Number(registrantCount ?? 0)
   const winners = Number(winnerCount ?? 0)
   const active = isActive ?? false
-  const deadlineNum = Number(deadline ?? 0)
-  const deadlineDate = deadlineNum > 0 ? new Date(deadlineNum * 1000) : null
-  const isPastDeadline = deadlineDate ? deadlineDate < new Date() : false
-
   const registrantAddresses = registrants as `0x${string}`[] | undefined
+
+  const handleRunRaffle = () => {
+    const emptyMerkle = "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`
+    writeContract({ 
+      address: address as `0x${string}`, 
+      abi: CAMPAIGN_ABI, 
+      functionName: 'runRaffle',
+      args: [emptyMerkle]
+    })
+  }
 
   const exportCSV = () => {
     if (!registrantAddresses || registrantAddresses.length === 0) return
@@ -107,6 +139,15 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
       >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
+            {isRaffleMode ? (
+              <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 flex items-center gap-1">
+                🎲 Raffle
+              </span>
+            ) : (
+              <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 flex items-center gap-1">
+                <Zap className="w-3 h-3" /> FCFS
+              </span>
+            )}
             <h3 className="font-medium text-text text-sm truncate">
               {(name as string) || 'Untitled Campaign'}
             </h3>
@@ -115,6 +156,11 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
             }`}>
               {!active ? 'Ended' : 'Live'}
             </span>
+            {isRaffleMode && isRaffleCompleted && (
+              <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">
+                Raffle Complete
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-4 text-xs text-text-secondary">
             <span className="flex items-center gap-1">
@@ -156,6 +202,45 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
               Description: {(description as string) || 'No description'}
             </p>
           </div>
+          
+          {/* Run Raffle Button */}
+          {isRaffleMode && !isRaffleCompleted && isActive && isOwner && (
+            <div className="mb-3">
+              {!isPastDeadline ? (
+                <div className="p-2 bg-warning/10 border border-warning/20 rounded-lg text-center">
+                  <p className="text-xs text-warning">Raffle available after deadline ({deadlineDate?.toLocaleDateString()})</p>
+                </div>
+              ) : !hasRegistrants ? (
+                <div className="p-2 bg-warning/10 border border-warning/20 rounded-lg text-center">
+                  <p className="text-xs text-warning">No registrants to run raffle</p>
+                </div>
+              ) : (
+                <button
+                  onClick={handleRunRaffle}
+                  disabled={isPending || isConfirming || !canRunRaffle}
+                  className="w-full py-2 bg-purple-500/20 border border-purple-500/30 text-purple-400 rounded-lg text-sm font-medium hover:bg-purple-500/30 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isPending || isConfirming ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Running Raffle...</>
+                  ) : (
+                    <>🎲 Run Raffle</>
+                  )}
+                </button>
+              )}
+              {writeError && (
+                <p className="text-xs text-error mt-1">{writeError.message.slice(0, 100)}</p>
+              )}
+              {isConfirmed && (
+                <p className="text-xs text-success mt-1">✅ Raffle completed! Winners selected.</p>
+              )}
+            </div>
+          )}
+
+          {isRaffleMode && isRaffleCompleted && (
+            <div className="mb-3 p-2 bg-success/10 border border-success/20 rounded-lg text-center">
+              <p className="text-xs text-success">🎲 Raffle completed! {winners} winners selected</p>
+            </div>
+          )}
           
           {registrantAddresses && registrantAddresses.length > 0 ? (
             <div>
