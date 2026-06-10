@@ -1,14 +1,14 @@
 // src/components/layout/Navbar.tsx
 import { Link, useLocation } from 'react-router-dom'
 import { useAccount } from 'wagmi'
-import { Compass, PlusCircle, LayoutDashboard, BookOpen } from 'lucide-react'  // ✅ Tambah BookOpen
+import { Compass, PlusCircle, LayoutDashboard, BookOpen } from 'lucide-react'
 import ConnectButton from '../wallet/ConnectButton'
 
 const links = [
   { to: '/explore', label: 'Explore', icon: Compass },
   { to: '/create', label: 'Create', icon: PlusCircle },
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/docs', label: 'Docs', icon: BookOpen },  // ✅ Tambah Docs
+  { to: '/docs', label: 'Docs', icon: BookOpen },
 ]
 
 export default function Navbar() {
