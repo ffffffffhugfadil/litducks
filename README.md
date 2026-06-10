@@ -9,7 +9,7 @@
 
 **The first native on-chain whitelist management platform on LitVM LiteForge.**
 
-[Live App](https://litducks.xyz) · [Docs](www.litducks.xyz/docs) · [Explorer](https://liteforge.explorer.caldera.xyz/address/0xdDC8255958463A7BF7dC19657800201a1f8a00B6) · [Twitter](https://x.com/litducksnft)
+[Live App](https://litducks.xyz) · [Docs](https://www.litducks.xyz/docs) · [Explorer](https://liteforge.explorer.caldera.xyz/address/0xdDC8255958463A7BF7dC19657800201a1f8a00B6) · [Twitter](https://x.com/litducksnft)
 
 </div>
 
