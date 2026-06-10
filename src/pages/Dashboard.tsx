@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
 import { FACTORY_ADDRESS, FACTORY_ABI } from '../config/contracts'  
 import { CAMPAIGN_ABI } from '../config/contracts'  
-import { Download, Trophy, Users, Calendar, ExternalLink, Loader2, PlusCircle, Zap, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Download, Trophy, Users, Calendar, ExternalLink, Loader2, PlusCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import NetworkGuard from '../components/wallet/NetworkGuard'
 import { EXPLORER_URL } from '../lib/chain'
@@ -37,6 +37,7 @@ function FCFSIcon({ className = "w-3 h-3" }: { className?: string }) {
 
 function CampaignRow({ address, userAddress }: { address: string; userAddress: string }) {
   const [expanded, setExpanded] = useState(false)
+  const [winnersList, setWinnersList] = useState<string[]>([])
 
   // ============ READ CONTRACTS ============
   const { data: name } = useReadContract({
@@ -106,11 +107,24 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
     query: { enabled: expanded },
   })
 
+  const { data: winnersData } = useReadContract({
+    address: address as `0x${string}`,
+    abi: CAMPAIGN_ABI,
+    functionName: 'getWinners',
+    query: { enabled: expanded && raffleRun === true },
+  })
+
   // ============ WRITE CONTRACT ============
   const { writeContract, data: txHash, isPending, error: writeError } = useWriteContract()
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
 
   // ============ DATA PROCESSING ============
+  useEffect(() => {
+    if (winnersData && Array.isArray(winnersData)) {
+      setWinnersList(winnersData as string[])
+    }
+  }, [winnersData])
+
   const isOwner = creator && userAddress && creator.toLowerCase() === userAddress.toLowerCase()
   const isRaffleMode = selectionMode === 1
   const isRaffleCompleted = raffleRun === true
@@ -147,6 +161,18 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
     const a = document.createElement('a')
     a.href = url
     a.download = `${(name as string)?.replace(/\s+/g, '_') || 'campaign'}_registrants.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const exportWinnersCSV = () => {
+    if (!winnersList || winnersList.length === 0) return
+    const csv = ['address,winner_number', ...winnersList.map((addr, i) => `${addr},${i + 1}`)].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(name as string)?.replace(/\s+/g, '_') || 'campaign'}_winners.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -203,15 +229,6 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
           >
             <ExternalLink className="w-4 h-4" />
           </Link>
-          {registrantAddresses && registrantAddresses.length > 0 && (
-            <button
-              onClick={e => { e.stopPropagation(); exportCSV() }}
-              className="p-1.5 text-text-secondary hover:text-primary transition-colors"
-              title="Export CSV"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-          )}
         </div>
       </div>
 
@@ -262,6 +279,30 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
             </div>
           )}
           
+          {/* Tombol Export - hanya di dalam expanded section */}
+          <div className="flex gap-2">
+            {/* Export Registrants - hanya untuk FCFS */}
+            {!isRaffleMode && registrantAddresses && registrantAddresses.length > 0 && (
+              <button
+                onClick={exportCSV}
+                className="px-3 py-1.5 bg-surface-2 border border-border rounded-lg text-xs text-text-secondary hover:text-primary transition-colors flex items-center gap-1"
+              >
+                <Download className="w-3 h-3" /> Export CSV
+              </button>
+            )}
+            
+            {/* Export Winners - hanya untuk Raffle yang sudah selesai */}
+            {isRaffleMode && isRaffleCompleted && winnersList.length > 0 && (
+              <button
+                onClick={exportWinnersCSV}
+                className="px-3 py-1.5 bg-purple-500/20 border border-purple-500/30 rounded-lg text-xs text-purple-400 hover:bg-purple-500/30 transition-colors flex items-center gap-1"
+              >
+                <Download className="w-3 h-3" /> Export Winners ({winnersList.length})
+              </button>
+            )}
+          </div>
+
+          {/* Daftar Registrants */}
           {registrantAddresses && registrantAddresses.length > 0 ? (
             <div>
               <p className="text-xs font-medium text-text mb-2">Registrants ({registrantAddresses.length})</p>
@@ -278,6 +319,24 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
             </div>
           ) : (
             <p className="text-xs text-text-secondary text-center py-2">No registrants yet</p>
+          )}
+
+          {/* Daftar Winners (jika raffle selesai) */}
+          {isRaffleMode && isRaffleCompleted && winnersList.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-text mb-2">Winners ({winnersList.length})</p>
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {winnersList.map((addr, i) => (
+                  <div key={addr} className="flex items-center justify-between px-3 py-1.5 bg-green-500/10 rounded-lg border border-green-500/20">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-secondary">{i + 1}.</span>
+                      <span className="font-mono text-xs text-text">{shortAddr(addr)}</span>
+                    </div>
+                    <Trophy className="w-3 h-3 text-green-400" />
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           <div className="pt-2 border-t border-border">
@@ -297,7 +356,6 @@ export default function Dashboard() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 6
 
-  // Ambil semua campaign dari factory
   const { data: creatorCampaigns, isLoading, error, refetch } = useReadContract({
     address: FACTORY_ADDRESS as `0x${string}`,
     abi: FACTORY_ABI,
@@ -308,7 +366,7 @@ export default function Dashboard() {
 
   const campaigns = (creatorCampaigns as string[]) ?? []
 
- 
+  // Urutkan dari terbaru (reverse order)
   const sortedCampaigns = useMemo(() => {
     return [...campaigns].reverse()
   }, [campaigns])
