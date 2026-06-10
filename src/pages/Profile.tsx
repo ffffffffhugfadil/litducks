@@ -48,10 +48,9 @@ function CampaignHistoryItem({ campaignAddr, wallet }: { campaignAddr: string; w
   // Hanya tampilkan jika wallet terdaftar
   if (!isRegistered) return null
 
-  const campaignName = (name as string) || "Untitled Campaign"
+  const campaignName = (name as string) || 'Untitled Campaign'
   const createdAtNum = Number(createdAt ?? 0)
   const createdAtDate = createdAtNum > 0 ? new Date(createdAtNum * 1000) : new Date()
-  const deadlineDate = createdAtNum > 0 ? new Date(createdAtNum * 1000 + 7 * 24 * 60 * 60 * 1000) : new Date()
 
   return (
     <Link
@@ -91,7 +90,7 @@ function CampaignHistoryItem({ campaignAddr, wallet }: { campaignAddr: string; w
 
 export default function Profile() {
   const { address: paramAddress } = useParams<{ address: string }>()
-  const { address: connectedAddress } = useAccount()
+  const { address: connectedAddress, isConnected } = useAccount()
 
   const profileAddress = paramAddress ?? connectedAddress
   const isOwnProfile = profileAddress?.toLowerCase() === connectedAddress?.toLowerCase()
@@ -103,6 +102,21 @@ export default function Profile() {
     functionName: 'getAllCampaigns',
     query: { enabled: !!FACTORY_ADDRESS },
   })
+
+  // ✅ Tampilkan pesan jika wallet belum terhubung
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen pt-24 flex items-center justify-center">
+        <div className="text-center">
+          <div className="flex justify-center mb-4">
+            <img src="/duck-icon.svg" alt="Duck" className="w-16 h-16" />
+          </div>
+          <h2 className="text-2xl font-bold mb-2">Connect Your Wallet</h2>
+          <p className="text-gray-400">Please connect your wallet to view your whitelist history</p>
+        </div>
+      </div>
+    )
+  }
 
   if (!profileAddress || !isAddress(profileAddress)) {
     return (
