@@ -6,6 +6,7 @@ import Create from './pages/Create'
 import Campaign from './pages/Campaign'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
+import Overview from './pages/docs/Overview'
 
 const router = createBrowserRouter([
   {
@@ -17,7 +18,9 @@ const router = createBrowserRouter([
       { path: 'create', element: <Create /> },
       { path: 'campaign/:id', element: <Campaign /> },
       { path: 'dashboard', element: <Dashboard /> },
-      { path: 'profile/:address', element: <Profile /> },
+      { path: 'profile', element: <Profile /> },  // 
+      { path: 'profile/:address', element: <Profile /> }, 
+      { path: 'docs', element: <Overview /> },
     ],
   },
 ])

@@ -1,13 +1,14 @@
 // src/components/layout/Navbar.tsx
 import { Link, useLocation } from 'react-router-dom'
 import { useAccount } from 'wagmi'
-import { Compass, PlusCircle, LayoutDashboard } from 'lucide-react'
+import { Compass, PlusCircle, LayoutDashboard, BookOpen } from 'lucide-react'  // ✅ Tambah BookOpen
 import ConnectButton from '../wallet/ConnectButton'
 
 const links = [
   { to: '/explore', label: 'Explore', icon: Compass },
   { to: '/create', label: 'Create', icon: PlusCircle },
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/docs', label: 'Docs', icon: BookOpen },  // ✅ Tambah Docs
 ]
 
 export default function Navbar() {
@@ -30,7 +31,7 @@ export default function Navbar() {
         {/* Nav links */}
         <nav className="hidden md:flex items-center gap-1">
           {links.map(({ to, label }) => {
-            const active = location.pathname.startsWith(to)
+            const active = location.pathname === to || location.pathname.startsWith(to + '/')
             return (
               <Link
                 key={to}
