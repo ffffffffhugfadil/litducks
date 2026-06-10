@@ -9,7 +9,7 @@
 
 **The first native on-chain whitelist management platform on LitVM LiteForge.**
 
-[Live App](https://litducks.xyz) · [Docs](https://litducks.xyz/docs) · [Explorer](https://liteforge.explorer.caldera.xyz/address/0xdDC8255958463A7BF7dC19657800201a1f8a00B6) · [Twitter](https://x.com/litducksnft)
+[Live App](https://litducks.xyz) · [Docs](https://www.litducks.xyz/docs) · [Explorer](https://liteforge.explorer.caldera.xyz/address/0xdDC8255958463A7BF7dC19657800201a1f8a00B6) · [Twitter](https://x.com/litducksnft)
 
 </div>
 
@@ -117,9 +117,9 @@ LitDucks provides a **decentralized, on-chain whitelist management system** wher
 │                        LitDucksFactory.sol                      │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │  createCampaign() → deploys new LitDucksCampaign         │   │
-│  │  getAllCampaigns() → registry of all campaigns            │   │
-│  │  getCreatorCampaigns(address) → per-creator index         │   │
-│  │  getFeaturedCampaigns() → featured list                   │   │
+│  │  getAllCampaigns() → registry of all campaigns           │   │
+│  │  getCreatorCampaigns(address) → per-creator index        │   │
+│  │  getFeaturedCampaigns() → featured list                  │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
           │ deploys
@@ -129,8 +129,8 @@ LitDucks provides a **decentralized, on-chain whitelist management system** wher
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │  register() → on-chain registration                      │   │
 │  │  getRegistrants() → all registered wallets               │   │
-│  │  runRaffle(bytes32) → random winner selection             │   │
-│  │  setMerkleRoot(bytes32) → set winner merkle root          │   │
+│  │  runRaffle(bytes32) → random winner selection            │   │
+│  │  setMerkleRoot(bytes32) → set winner merkle root         │   │
 │  │  getParams() → campaign configuration                    │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
@@ -139,22 +139,28 @@ LitDucks provides a **decentralized, on-chain whitelist management system** wher
 ### Data Flow
 
 ```
-Creator                  LitDucks Frontend              LiteForge Blockchain
-   │                            │                               │
-   │── Fill campaign form ──────▶│                               │
-   │                            │── deploy via Factory ─────────▶│
-   │                            │◀── campaign address ───────────│
-   │◀── campaign live! ─────────│                               │
-   │                            │                               │
-User                            │                               │
-   │── browse explore ──────────▶│                               │
-   │                            │── read campaigns ─────────────▶│
-   │◀── campaign list ──────────│◀── on-chain data ──────────────│
-   │── click register ──────────▶│                               │
-   │                            │── check requirements ─────────▶│
-   │                            │◀── eligible ───────────────────│
-   │── confirm tx ──────────────▶│── register() ─────────────────▶│
-   │◀── registered! ────────────│◀── tx confirmed ───────────────│
+Creator                  LitDucks Frontend             LiteForge Blockchain
+     ║                             │                               │
+     ╠═══ Fill campaign form ═════>│                               │
+     ║                             ╠═══ deploy via Factory ═══════>│
+     ║                             <─── campaign address ──────────╢
+     <─── campaign live! ══════════╣                               │
+     ║                             │                               │
+═════════════════════════════════════════════════════════════════════════════
+     ║                             │                               │
+  User                             │                               │
+     ║                             │                               │
+     ╠═══ browse explore ═════════>│                               │
+     ║                             ╠═══ read campaigns ═══════════>│
+     ║                             <─── on-chain data ─────────────╢
+     <─── campaign list ═══════════╣                               │
+     ╠═══ click register ═════════>│                               │
+     ║                             ╠═══ check requirements ═══════>│
+     ║                             <─── eligible ──────────────────╢
+     ╠═══ confirm tx ═════════════>│                               │
+     ║                             ╠═══ register() ═══════════════>│
+     ║                             <─── tx confirmed ──────────────╢
+     <─── registered! ═════════════╣                               │
 ```
 
 ### Requirement Verification Flow
