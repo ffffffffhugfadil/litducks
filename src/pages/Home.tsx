@@ -5,18 +5,13 @@ import { ArrowRight, Layers, Users, Trophy, Shield, Zap, Star } from 'lucide-rea
 import { useFactory } from '../hooks/useFactory'
 import CampaignCard from '../components/campaigns/CampaignCard'
 import SkeletonCard from '../components/campaigns/SkeletonCard'
-import FactoryAddressInput from '../components/ui/FactoryAddressInput'
-import { useWalletStore } from '../store/useWalletStore'
 import { FAUCET_URL } from '../lib/chain'
 
 export default function Home() {
   const { isConnected } = useAccount()
-  const { factoryAddress } = useWalletStore()
   const { allCampaigns, campaignsCount, loadingCampaigns } = useFactory()
 
-  // ✅ Urutkan dari yang terbaru (createdAt dari factory sudah berurutan, kita balik)
-  // allCampaigns dari factory biasanya urutan dari lama ke baru
-  // Maka kita reverse agar yang terbaru di atas
+  // Urutkan dari yang terbaru
   const recentCampaigns = allCampaigns?.slice().reverse().slice(0, 6) ?? []
 
   return (
@@ -77,27 +72,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Factory address config */}
-      {!factoryAddress && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 mb-8">
-          <div className="p-4 bg-warning/5 border border-warning/20 rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <div className="flex-1">
-              <p className="text-sm font-medium text-warning">Factory contract not configured</p>
-              <p className="text-xs text-text-secondary mt-0.5">
-                Deploy LitDucksFactory.sol to LiteForge and enter the address below.
-              </p>
-            </div>
-            <FactoryAddressInput />
-          </div>
-        </section>
-      )}
-
-      {factoryAddress && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 mb-4 flex justify-end">
-          <FactoryAddressInput />
-        </div>
-      )}
-
       {/* Features Grid */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 pb-16">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-16">
@@ -144,35 +118,31 @@ export default function Home() {
         </div>
 
         {/* Campaigns Section */}
-        {factoryAddress && (
-          <>
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-xl font-bold text-text">Recent Campaigns</h2>
-              <Link to="/explore" className="text-sm text-primary hover:text-primary-light transition-colors flex items-center gap-1">
-                View all <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-xl font-bold text-text">Recent Campaigns</h2>
+          <Link to="/explore" className="text-sm text-primary hover:text-primary-light transition-colors flex items-center gap-1">
+            View all <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
 
-            {loadingCampaigns ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
-              </div>
-            ) : recentCampaigns.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {recentCampaigns.map(addr => (
-                  <CampaignCard key={addr} address={addr} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-text-secondary">
-                <Star className="w-8 h-8 mx-auto mb-3 opacity-30" />
-                <p className="text-sm">No campaigns yet</p>
-                <Link to="/create" className="text-xs text-primary hover:underline mt-1 inline-block">
-                  Create the first one →
-                </Link>
-              </div>
-            )}
-          </>
+        {loadingCampaigns ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
+          </div>
+        ) : recentCampaigns.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recentCampaigns.map(addr => (
+              <CampaignCard key={addr} address={addr} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 text-text-secondary">
+            <Star className="w-8 h-8 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">No campaigns yet</p>
+            <Link to="/create" className="text-xs text-primary hover:underline mt-1 inline-block">
+              Create the first one →
+            </Link>
+          </div>
         )}
       </section>
 
