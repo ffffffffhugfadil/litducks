@@ -1,4 +1,4 @@
-# 🦆 LitDucks — Whitelist Management Platform for LitVM LiteForge
+# 🦆 LitDucks || Whitelist Management Platform for LitVM LiteForge
 
 <div align="center">
 
