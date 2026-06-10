@@ -7,25 +7,16 @@ import SkeletonCard from '../components/campaigns/SkeletonCard'
 import FactoryAddressInput from '../components/ui/FactoryAddressInput'
 import { useWalletStore } from '../store/useWalletStore'
 import { useReadContract } from 'wagmi'
-import { CAMPAIGN_ABI, FACTORY_ADDRESS, FACTORY_ABI } from '../config/contracts'
+import { CAMPAIGN_ABI } from '../config/contracts'
 
 type Filter = 'all' | 'live' | 'ended' | 'fcfs' | 'raffle'
 
-// Interface untuk campaign dengan timestamp
-interface CampaignWithTimestamp {
-  address: string
-  createdAt: number
-  selectionMode?: number
-  isActive?: boolean
-}
-
-// Komponen wrapper untuk mendapatkan info campaign + createdAt
+// Komponen wrapper untuk mendapatkan info campaign + filter
 function CampaignItemWithData({ address, filter, onDataLoaded }: { 
   address: string; 
   filter: Filter;
-  onDataLoaded?: (address: string, createdAt: number) => void 
+  onDataLoaded?: (address: string) => void 
 }) {
-  // Ambil data dari contract
   const { data: selectionMode, isLoading: loadingMode } = useReadContract({
     address: address as `0x${string}`,
     abi: CAMPAIGN_ABI,
@@ -38,20 +29,14 @@ function CampaignItemWithData({ address, filter, onDataLoaded }: {
     functionName: 'isActive',
   })
   
-  const { data: createdAt, isLoading: loadingCreatedAt } = useReadContract({
-    address: address as `0x${string}`,
-    abi: CAMPAIGN_ABI,
-    functionName: 'createdAt',
-  })
+  const isLoading = loadingMode || loadingActive
   
-  const isLoading = loadingMode || loadingActive || loadingCreatedAt
-  
-  // Kirim createdAt ke parent untuk sorting
+  // Notifikasi ke parent bahwa data sudah loaded
   useEffect(() => {
-    if (createdAt !== undefined && onDataLoaded) {
-      onDataLoaded(address, Number(createdAt))
+    if (!isLoading && onDataLoaded) {
+      onDataLoaded(address)
     }
-  }, [createdAt, address, onDataLoaded])
+  }, [isLoading, address, onDataLoaded])
   
   // Logika filter
   let shouldShow = true
@@ -88,30 +73,15 @@ export default function Explore() {
   const { allCampaigns, loadingCampaigns } = useFactory()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
-  const [campaignTimestamps, setCampaignTimestamps] = useState<Map<string, number>>(new Map())
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 12
 
   const campaigns = allCampaigns ?? []
 
-  // Kumpulkan semua createdAt dari campaign
-  const handleDataLoaded = (address: string, createdAt: number) => {
-    setCampaignTimestamps(prev => {
-      if (prev.get(address) === createdAt) return prev
-      const newMap = new Map(prev)
-      newMap.set(address, createdAt)
-      return newMap
-    })
-  }
-
-  // Urutkan campaign berdasarkan createdAt (terbaru di atas)
+  // ✅ Sama seperti di Dashboard: cukup balik urutan
   const sortedCampaigns = useMemo(() => {
-    return [...campaigns].sort((a, b) => {
-      const timeA = campaignTimestamps.get(a) || 0
-      const timeB = campaignTimestamps.get(b) || 0
-      return timeB - timeA // Terbaru di atas
-    })
-  }, [campaigns, campaignTimestamps])
+    return [...campaigns].reverse()
+  }, [campaigns])
 
   // Filter berdasarkan search
   const filteredBySearch = useMemo(() => {
@@ -120,10 +90,6 @@ export default function Explore() {
       addr.toLowerCase().includes(search.toLowerCase())
     )
   }, [sortedCampaigns, search])
-
-  // Filter berdasarkan status (live/ended/fcfs/raffle) - perlu fetch data
-  // Untuk filter ini, kita tetap pakai CampaignItem yang akan handle sendiri
-  // Tapi kita perlu pagination setelah semua filter
 
   // Pagination
   const totalPages = Math.ceil(filteredBySearch.length / itemsPerPage)
@@ -136,7 +102,7 @@ export default function Explore() {
   // Reset page ketika filter atau search berubah
   useEffect(() => {
     setCurrentPage(1)
-  }, [search, filter, factoryAddress])
+  }, [search, filter])
 
   const filters: { key: Filter; label: string }[] = [
     { key: 'all', label: 'All' },
@@ -221,12 +187,7 @@ export default function Explore() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {paginatedCampaigns.map(addr => (
-                <CampaignItemWithData 
-                  key={addr} 
-                  address={addr} 
-                  filter={filter}
-                  onDataLoaded={handleDataLoaded}
-                />
+                <CampaignItemWithData key={addr} address={addr} filter={filter} />
               ))}
             </div>
 
