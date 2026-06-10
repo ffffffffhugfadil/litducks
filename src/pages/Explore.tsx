@@ -1,6 +1,6 @@
 // src/pages/Explore.tsx
 import { useState, useMemo, useEffect } from 'react'
-import { Search, SlidersHorizontal, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, SlidersHorizontal, X, ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react'
 import { useFactory } from '../hooks/useFactory'
 import CampaignCard from '../components/campaigns/CampaignCard'
 import SkeletonCard from '../components/campaigns/SkeletonCard'
@@ -10,12 +10,23 @@ import { useReadContract } from 'wagmi'
 import { CAMPAIGN_ABI } from '../config/contracts'
 
 type Filter = 'all' | 'live' | 'ended' | 'fcfs' | 'raffle'
+type SortBy = 'newest' | 'oldest' | 'mostRegistrants' | 'leastRegistrants'
 
-function CampaignItemWithData({ address, filter, onNameLoaded }: { 
+interface CampaignData {
+  address: string
+  name: string
+  isActive: boolean
+  selectionMode: number
+  registrantCount: number
+}
+
+function CampaignItemWithData({ address, filter, onDataLoaded }: { 
   address: string; 
   filter: Filter;
-  onNameLoaded?: (address: string, name: string) => void 
+  onDataLoaded?: (address: string, data: CampaignData) => void 
 }) {
+  const [localData, setLocalData] = useState<CampaignData | null>(null)
+  
   const { data: selectionMode, isLoading: loadingMode } = useReadContract({
     address: address as `0x${string}`,
     abi: CAMPAIGN_ABI,
@@ -34,33 +45,47 @@ function CampaignItemWithData({ address, filter, onNameLoaded }: {
     functionName: 'name',
   })
   
-  const isLoading = loadingMode || loadingActive || loadingName
+  const { data: registrantCount, isLoading: loadingCount } = useReadContract({
+    address: address as `0x${string}`,
+    abi: CAMPAIGN_ABI,
+    functionName: 'registrantCount',
+  })
+  
+  const isLoading = loadingMode || loadingActive || loadingName || loadingCount
   
   useEffect(() => {
-    if (name && !loadingName && onNameLoaded) {
-      onNameLoaded(address, name as string)
+    if (!isLoading && name !== undefined) {
+      const data: CampaignData = {
+        address,
+        name: (name as string) || 'Untitled',
+        isActive: isActive as boolean || false,
+        selectionMode: (selectionMode as number) || 0,
+        registrantCount: Number(registrantCount ?? 0),
+      }
+      setLocalData(data)
+      if (onDataLoaded) onDataLoaded(address, data)
     }
-  }, [name, loadingName, address, onNameLoaded])
+  }, [isLoading, address, name, isActive, selectionMode, registrantCount, onDataLoaded])
   
   let shouldShow = true
   switch (filter) {
     case 'live':
-      shouldShow = isActive === true
+      shouldShow = localData?.isActive === true
       break
     case 'ended':
-      shouldShow = isActive === false
+      shouldShow = localData?.isActive === false
       break
     case 'fcfs':
-      shouldShow = selectionMode === 0
+      shouldShow = localData?.selectionMode === 0
       break
     case 'raffle':
-      shouldShow = selectionMode === 1
+      shouldShow = localData?.selectionMode === 1
       break
     default:
       shouldShow = true
   }
   
-  if (isLoading) {
+  if (isLoading || !localData) {
     return <SkeletonCard />
   }
   
@@ -77,25 +102,72 @@ export default function Explore() {
   const [search, setSearch] = useState('')
   const [searchType, setSearchType] = useState<'address' | 'name'>('name')
   const [filter, setFilter] = useState<Filter>('all')
+  const [sortBy, setSortBy] = useState<SortBy>('newest')
   const [currentPage, setCurrentPage] = useState(1)
-  const [campaignNames, setCampaignNames] = useState<Map<string, string>>(new Map())
+  const [campaignsData, setCampaignsData] = useState<Map<string, CampaignData>>(new Map())
   const itemsPerPage = 12
 
   const campaigns = allCampaigns ?? []
 
-  const handleNameLoaded = (address: string, name: string) => {
-    setCampaignNames(prev => {
-      if (prev.get(address) === name) return prev
+  const handleDataLoaded = (address: string, data: CampaignData) => {
+    setCampaignsData(prev => {
       const newMap = new Map(prev)
-      newMap.set(address, name)
+      newMap.set(address, data)
       return newMap
     })
   }
 
-  const sortedCampaigns = useMemo(() => {
-    return [...campaigns].reverse()
-  }, [campaigns])
+  // ✅ Filter berdasarkan status terlebih dahulu
+  const statusFilteredCampaigns = useMemo(() => {
+    let filtered = [...campaigns]
+    
+    switch (filter) {
+      case 'live':
+        filtered = filtered.filter(addr => campaignsData.get(addr)?.isActive === true)
+        break
+      case 'ended':
+        filtered = filtered.filter(addr => campaignsData.get(addr)?.isActive === false)
+        break
+      case 'fcfs':
+        filtered = filtered.filter(addr => campaignsData.get(addr)?.selectionMode === 0)
+        break
+      case 'raffle':
+        filtered = filtered.filter(addr => campaignsData.get(addr)?.selectionMode === 1)
+        break
+      default:
+        break
+    }
+    
+    return filtered
+  }, [campaigns, campaignsData, filter])
 
+  // ✅ Sort options
+  const sortedCampaigns = useMemo(() => {
+    let result = [...statusFilteredCampaigns]
+    
+    switch (sortBy) {
+      case 'newest':
+        return result.reverse()
+      case 'oldest':
+        return result
+      case 'mostRegistrants':
+        return result.sort((a, b) => {
+          const countA = campaignsData.get(a)?.registrantCount || 0
+          const countB = campaignsData.get(b)?.registrantCount || 0
+          return countB - countA
+        })
+      case 'leastRegistrants':
+        return result.sort((a, b) => {
+          const countA = campaignsData.get(a)?.registrantCount || 0
+          const countB = campaignsData.get(b)?.registrantCount || 0
+          return countA - countB
+        })
+      default:
+        return result
+    }
+  }, [statusFilteredCampaigns, sortBy, campaignsData])
+
+  // Search filter
   const filteredBySearch = useMemo(() => {
     if (!search) return sortedCampaigns
     
@@ -103,12 +175,13 @@ export default function Explore() {
       if (searchType === 'address') {
         return addr.toLowerCase().includes(search.toLowerCase())
       } else {
-        const name = campaignNames.get(addr)?.toLowerCase() || ''
+        const name = campaignsData.get(addr)?.name?.toLowerCase() || ''
         return name.includes(search.toLowerCase())
       }
     })
-  }, [sortedCampaigns, search, searchType, campaignNames])
+  }, [sortedCampaigns, search, searchType, campaignsData])
 
+  // Pagination
   const totalPages = Math.ceil(filteredBySearch.length / itemsPerPage)
   const paginatedCampaigns = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage
@@ -118,7 +191,7 @@ export default function Explore() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [search, searchType, filter])
+  }, [search, searchType, filter, sortBy])
 
   const filters: { key: Filter; label: string }[] = [
     { key: 'all', label: 'All' },
@@ -152,9 +225,8 @@ export default function Explore() {
           </p>
         </div>
 
-        {/* Search + Filters */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-6">
-          {/* Search Input */}
+        {/* Baris 1: Search + Sort */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
             <input
@@ -173,7 +245,7 @@ export default function Explore() {
             )}
           </div>
 
-          {/* Search Type Toggle - Dipisah dari input */}
+          {/* Search Type Toggle */}
           <div className="flex items-center gap-1.5 bg-surface border border-border rounded-lg p-1">
             <button
               onClick={() => setSearchType('name')}
@@ -197,22 +269,37 @@ export default function Explore() {
             </button>
           </div>
 
-          {/* Filter Buttons */}
-          <div className="flex items-center gap-1.5 bg-surface border border-border rounded-lg p-1">
-            {filters.map(f => (
-              <button
-                key={f.key}
-                onClick={() => setFilter(f.key)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  filter === f.key
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-text-secondary hover:text-text'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+          {/* ✅ Sort Dropdown */}
+          <div className="flex items-center gap-2 bg-surface border border-border rounded-lg px-3 py-1.5">
+            <ArrowUpDown className="w-3.5 h-3.5 text-text-secondary" />
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as SortBy)}
+              className="bg-transparent text-sm text-text outline-none"
+            >
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="mostRegistrants">Most Registrants</option>
+              <option value="leastRegistrants">Least Registrants</option>
+            </select>
           </div>
+        </div>
+
+        {/* Baris 2: Filters */}
+        <div className="flex items-center gap-1.5 bg-surface border border-border rounded-lg p-1 mb-6">
+          {filters.map(f => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                filter === f.key
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-text-secondary hover:text-text'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
 
         {/* Grid */}
@@ -236,7 +323,7 @@ export default function Explore() {
                   key={addr} 
                   address={addr} 
                   filter={filter}
-                  onNameLoaded={handleNameLoaded}
+                  onDataLoaded={handleDataLoaded}
                 />
               ))}
             </div>
