@@ -1,10 +1,10 @@
 // src/pages/Dashboard.tsx
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { Link } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { FACTORY_ADDRESS, FACTORY_ABI } from '../config/contracts'  
 import { CAMPAIGN_ABI } from '../config/contracts'  
-import { Download, Trophy, Users, Calendar, ExternalLink, Loader2, PlusCircle, Zap } from 'lucide-react'
+import { Download, Trophy, Users, Calendar, ExternalLink, Loader2, PlusCircle, Zap, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import NetworkGuard from '../components/wallet/NetworkGuard'
 import { EXPLORER_URL } from '../lib/chain'
@@ -12,6 +12,27 @@ import { EXPLORER_URL } from '../lib/chain'
 function shortAddr(addr: string) {
   if (!addr) return ''
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`
+}
+
+// SVG Icon untuk Raffle
+function RaffleIcon({ className = "w-3 h-3" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="2" y="6" width="20" height="12" rx="2" ry="2" />
+      <circle cx="8" cy="12" r="2" />
+      <circle cx="16" cy="12" r="2" />
+      <line x1="12" y1="6" x2="12" y2="18" />
+    </svg>
+  )
+}
+
+// SVG Icon untuk FCFS
+function FCFSIcon({ className = "w-3 h-3" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polygon points="12 2 15 9 22 9 16 14 19 22 12 17 5 22 8 14 2 9 9 9 12 2" />
+    </svg>
+  )
 }
 
 function CampaignRow({ address, userAddress }: { address: string; userAddress: string }) {
@@ -97,7 +118,6 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
   const deadlineDate = deadlineNum > 0 ? new Date(deadlineNum * 1000) : null
   const isPastDeadline = deadlineDate ? deadlineDate < new Date() : false
   
-  // ✅ Perbaiki: registrantCount adalah bigint, bandingkan dengan 0n
   const hasRegistrants = registrantCount !== undefined && registrantCount !== 0n
   const canRunRaffle = isOwner && isRaffleMode && isPastDeadline && isActive && !isRaffleCompleted && hasRegistrants
 
@@ -141,11 +161,11 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
           <div className="flex items-center gap-2 mb-1">
             {isRaffleMode ? (
               <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 flex items-center gap-1">
-                🎲 Raffle
+                <RaffleIcon className="w-3 h-3" /> Raffle
               </span>
             ) : (
               <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 flex items-center gap-1">
-                <Zap className="w-3 h-3" /> FCFS
+                <FCFSIcon className="w-3 h-3" /> FCFS
               </span>
             )}
             <h3 className="font-medium text-text text-sm truncate">
@@ -274,7 +294,10 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
 
 export default function Dashboard() {
   const { address } = useAccount()
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 6
 
+  // Ambil semua campaign dari factory
   const { data: creatorCampaigns, isLoading, error, refetch } = useReadContract({
     address: FACTORY_ADDRESS as `0x${string}`,
     abi: FACTORY_ABI,
@@ -283,7 +306,25 @@ export default function Dashboard() {
     query: { enabled: !!address },
   })
 
-  const campaigns = (creatorCampaigns as `0x${string}`[] | undefined) ?? []
+  const campaigns = (creatorCampaigns as string[]) ?? []
+
+ 
+  const sortedCampaigns = useMemo(() => {
+    return [...campaigns].reverse()
+  }, [campaigns])
+
+  // Pagination
+  const totalPages = Math.ceil(sortedCampaigns.length / itemsPerPage)
+  const paginatedCampaigns = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    const end = start + itemsPerPage
+    return sortedCampaigns.slice(start, end)
+  }, [sortedCampaigns, currentPage])
+
+  // Reset page saat data berubah
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [creatorCampaigns])
 
   if (!address) {
     return (
@@ -328,7 +369,7 @@ export default function Dashboard() {
                 Try Again
               </button>
             </div>
-          ) : campaigns.length === 0 ? (
+          ) : paginatedCampaigns.length === 0 ? (
             <div className="text-center py-16 bg-surface border border-border rounded-2xl">
               <img src="/duck-icon.svg" alt="Duck" className="w-12 h-12 mx-auto mb-3 opacity-40" />
               <p className="font-medium text-text mb-1">No campaigns yet</p>
@@ -341,11 +382,71 @@ export default function Dashboard() {
               </Link>
             </div>
           ) : (
-            <div className="space-y-3">
-              {campaigns.map(addr => (
-                <CampaignRow key={addr} address={addr} userAddress={address} />
-              ))}
-            </div>
+            <>
+              <div className="space-y-3">
+                {paginatedCampaigns.map((addr) => (
+                  <CampaignRow key={addr} address={addr} userAddress={address} />
+                ))}
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex justify-center items-center gap-2 mt-8">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className={`p-2 rounded-lg border transition-colors ${
+                      currentPage === 1
+                        ? 'border-border text-text-secondary cursor-not-allowed opacity-50'
+                        : 'border-border hover:border-primary text-text hover:text-primary'
+                    }`}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  
+                  <div className="flex gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum
+                      if (totalPages <= 5) {
+                        pageNum = i + 1
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i
+                      } else {
+                        pageNum = currentPage - 2 + i
+                      }
+                      
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                            currentPage === pageNum
+                              ? 'bg-primary text-white'
+                              : 'text-text hover:bg-surface-2'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className={`p-2 rounded-lg border transition-colors ${
+                      currentPage === totalPages
+                        ? 'border-border text-text-secondary cursor-not-allowed opacity-50'
+                        : 'border-border hover:border-primary text-text hover:text-primary'
+                    }`}
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </NetworkGuard>
       </div>
