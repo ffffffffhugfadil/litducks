@@ -1,8 +1,21 @@
-# LitDucks - Whitelist Management Platform for LitVM LiteForge
+# 🦆 LitDucks — Whitelist Management Platform for LitVM LiteForge
 
-LitDucks is a comprehensive whitelist management platform built specifically for the LitVM LiteForge testnet (Chain ID: 4441). It enables NFT projects and token sales to create and manage whitelist campaigns with on-chain wallet verification, eliminating the need for Google Forms or manual spreadsheets.
+<div align="center">
 
-## Table of Contents
+![LitDucks](https://img.shields.io/badge/LitDucks-WL%20Platform-7C6CFF?style=for-the-badge)
+![LiteForge](https://img.shields.io/badge/LiteForge-Testnet-f5c842?style=for-the-badge)
+![Chain ID](https://img.shields.io/badge/Chain%20ID-4441-blue?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+
+**The first native on-chain whitelist management platform on LitVM LiteForge.**
+
+[Live App](https://litducks.xyz) · [Docs](https://litducks.xyz/docs) · [Explorer](https://liteforge.explorer.caldera.xyz/address/0xdDC8255958463A7BF7dC19657800201a1f8a00B6) · [Twitter](https://x.com/litducksnft)
+
+</div>
+
+---
+
+## 📋 Table of Contents
 
 1. [Overview](#overview)
 2. [Problem Statement](#problem-statement)
@@ -17,130 +30,536 @@ LitDucks is a comprehensive whitelist management platform built specifically for
 11. [Deployment](#deployment)
 12. [Live Demo](#live-demo)
 13. [Repository Structure](#repository-structure)
-14. [License](#license)
+14. [Contributing](#contributing)
+15. [License](#license)
 
-## Overview
+---
 
-LitDucks is the first native whitelist management platform deployed on the LitVM LiteForge testnet. The platform allows project creators to launch whitelist campaigns with customizable on-chain verification requirements, while users can register their wallets through a simple interface that automatically checks eligibility based on predefined criteria.
+## 🌐 Overview
 
-## Problem Statement
+**LitDucks** is the first native whitelist management platform deployed on the **LitVM LiteForge testnet** (Chain ID: 4441).
 
-NFT projects and token sales on the LitVM testnet currently lack native tools to manage whitelists. Existing solutions rely on:
+The platform allows project creators to launch whitelist campaigns with customizable on-chain verification requirements, while users can register their wallets through a simple interface that automatically checks eligibility based on predefined criteria.
 
-- Google Forms with no wallet verification, leading to sybil attacks
-- External platforms that require manual data entry
-- Spreadsheet-based management that is error-prone and time-consuming
+Built for the **LiteForge Hackathon 2026** — Open Track.
 
-## Solution
+> "No more Google Forms. No more manual spreadsheets. Pure on-chain whitelist management." 🦆
 
-LitDucks provides a decentralized, on-chain whitelist management system where:
+---
 
-- Project creators can launch campaigns with configurable requirements
-- Users register directly with their wallets
-- All registrations are stored on-chain for transparency
-- Verification happens automatically through smart contracts and blockchain data
+## ❌ Problem Statement
 
-## Features
+NFT projects and token sales on the LitVM testnet currently lack native tools to manage whitelists:
 
-### For Project Creators
+- **No wallet verification** — Google Forms accept anyone without proof of wallet ownership
+- **Sybil attacks** — No way to prevent bots from filling up whitelist spots
+- **Manual management** — Spreadsheet-based systems are error-prone and time-consuming
+- **No native tooling** — Existing platforms (Premint, Atlas3) don't support LitVM natively
+- **Fragmented workflow** — Creators must juggle multiple tools to run a simple WL campaign
 
-- Campaign creation with customizable name, description, and banner image
-- Configurable requirements including:
-  - Minimum transaction count on LiteForge
-  - Minimum wallet age in days
-  - Required token holdings (ERC20, ERC721, ERC1155)
-- Two selection modes: First-Come-First-Served (FCFS) or Raffle
-- Free tier for campaigns up to 100 slots
-- Pro tier automatically activated for campaigns exceeding 100 slots
-- Dashboard to monitor registrations in real-time
-- CSV export of all registered wallets
-- Merkle root export for gas-efficient minting
+---
 
-### For Users
+## ✅ Solution
 
-- Browse all active whitelist campaigns
-- Filter campaigns by status (Live, Ended, FCFS, Raffle)
-- Automatic wallet verification against campaign requirements
-- One-click registration through connected wallet
-- Profile page to track all whitelist registrations
-- Winner status indication for raffle campaigns
+LitDucks provides a **decentralized, on-chain whitelist management system** where:
 
-### Platform Features
+- Project creators launch campaigns with **configurable on-chain requirements**
+- Users register directly with their **connected wallets**
+- All registrations are **stored on-chain** for full transparency
+- Verification happens **automatically** through smart contracts and blockchain data
+- Winners are selected **on-chain** via FCFS or provably fair Raffle
 
-- On-chain verification using blockchain data
-- Anti-sybil protection through multiple requirement types
-- IPFS support for campaign banner images
-- Responsive design for desktop and mobile devices
-- Comprehensive documentation
+---
 
-## Architecture
+## ✨ Features
 
-The platform follows a factory-campaign pattern:
+### For Project Creators 🎨
 
-- **LitDucksFactory.sol**: Deploys new campaign contracts, handles tier management, and maintains a global registry of all campaigns
-- **LitDucksCampaign.sol**: Individual campaign contract that manages registrations, verifies requirements, and handles winner selection for raffles
+| Feature | Description |
+|---------|-------------|
+| Campaign Creation | Name, description, banner image, social links |
+| Slot Management | Up to 100 slots free, unlimited with Pro tier |
+| Selection Modes | FCFS (First-Come-First-Served) or Raffle |
+| Requirements | Minimum tx count, wallet age, token/NFT holding |
+| Dashboard | Real-time registration monitoring |
+| CSV Export | Download all registered wallets as CSV |
+| Merkle Root | Generate Merkle root for gas-efficient minting |
+
+### For Users 👤
+
+| Feature | Description |
+|---------|-------------|
+| Browse Campaigns | Explore all active WL campaigns |
+| Filter & Search | Filter by status, mode, and project name |
+| Auto Verification | System checks wallet eligibility automatically |
+| One-Click Register | Register via connected wallet |
+| Profile Page | Track all whitelist registrations |
+| Winner Status | Check raffle results on-chain |
+
+### Platform Features ⚡
+
+| Feature | Description |
+|---------|-------------|
+| On-Chain Verification | All checks via blockchain data, no off-chain API |
+| Anti-Sybil | Combine multiple requirements for max protection |
+| IPFS Support | Decentralized banner image storage |
+| Responsive Design | Works on desktop and mobile |
+| LiteForge Native | Built specifically for Chain ID 4441 |
+
+---
+
+## 🏗️ Architecture
+
+### Smart Contract Pattern — Factory + Campaign
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        LitDucksFactory.sol                      │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  createCampaign() → deploys new LitDucksCampaign         │   │
+│  │  getAllCampaigns() → registry of all campaigns            │   │
+│  │  getCreatorCampaigns(address) → per-creator index         │   │
+│  │  getFeaturedCampaigns() → featured list                   │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+          │ deploys
+          ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      LitDucksCampaign.sol (per campaign)        │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  register() → on-chain registration                      │   │
+│  │  getRegistrants() → all registered wallets               │   │
+│  │  runRaffle(bytes32) → random winner selection             │   │
+│  │  setMerkleRoot(bytes32) → set winner merkle root          │   │
+│  │  getParams() → campaign configuration                    │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ### Data Flow
 
-1. Creator connects wallet and submits campaign parameters
-2. Factory contract deploys new campaign contract
-3. User connects wallet and views campaign requirements
-4. System verifies user wallet against requirements using on-chain data
-5. User registers through the campaign contract
-6. Creator exports registrants list or runs raffle
-7. Winners list exported as Merkle root for minting
+```
+Creator                  LitDucks Frontend              LiteForge Blockchain
+   │                            │                               │
+   │── Fill campaign form ──────▶│                               │
+   │                            │── deploy via Factory ─────────▶│
+   │                            │◀── campaign address ───────────│
+   │◀── campaign live! ─────────│                               │
+   │                            │                               │
+User                            │                               │
+   │── browse explore ──────────▶│                               │
+   │                            │── read campaigns ─────────────▶│
+   │◀── campaign list ──────────│◀── on-chain data ──────────────│
+   │── click register ──────────▶│                               │
+   │                            │── check requirements ─────────▶│
+   │                            │◀── eligible ───────────────────│
+   │── confirm tx ──────────────▶│── register() ─────────────────▶│
+   │◀── registered! ────────────│◀── tx confirmed ───────────────│
+```
 
-## Smart Contracts
+### Requirement Verification Flow
+
+```
+User connects wallet
+        │
+        ▼
+Check: wallet has min X transactions? ──── No ──▶ Show requirement not met
+        │ Yes
+        ▼
+Check: wallet age ≥ X days? ──────────────── No ──▶ Show requirement not met
+        │ Yes
+        ▼
+Check: holds required token/NFT? ─────────── No ──▶ Show requirement not met
+(if set)│ Yes / not required
+        ▼
+Show "Register for Whitelist" button ✅
+```
+
+---
+
+## 📜 Smart Contracts
 
 ### LitDucksFactory.sol
 
-| Function | Description |
-|----------|-------------|
-| `createCampaign()` | Deploys a new campaign contract |
-| `getAllCampaigns()` | Returns all campaign addresses |
-| `getCreatorCampaigns(address)` | Returns campaigns for a specific creator |
-| `getFeaturedCampaigns()` | Returns featured campaigns |
-
 **Address:** `0xdDC8255958463A7BF7dC19657800201a1f8a00B6`
+
+**Network:** LitVM LiteForge Testnet (Chain ID: 4441)
+
+**Explorer:** [View on LiteForge Explorer](https://liteforge.explorer.caldera.xyz/address/0xdDC8255958463A7BF7dC19657800201a1f8a00B6)
+
+**Key Functions:**
+
+```solidity
+// Deploy a new campaign
+function createCampaign(
+    string memory _name,
+    string memory _description,
+    string memory _bannerImage,
+    string memory _twitter,
+    string memory _discord,
+    string memory _website,
+    uint256 _totalSlots,
+    uint256 _deadline,
+    uint8   _selectionMode,   // 0 = FCFS, 1 = Raffle
+    uint256 _minTransactions,
+    uint256 _minWalletAgeDays,
+    address _requiredToken,
+    uint8   _tokenType,       // 0 = none, 1 = ERC721, 2 = ERC20
+    uint256 _minTokenBalance,
+    uint256 _tokenId,
+    bool    _isPro,
+    bool    _isFeatured
+) external payable returns (address campaignAddress)
+
+// View all campaigns
+function getAllCampaigns() external view returns (address[] memory)
+function getCreatorCampaigns(address creator) external view returns (address[] memory)
+function getCampaignsCount() external view returns (uint256)
+```
 
 ### LitDucksCampaign.sol
 
-| Function | Description |
-|----------|-------------|
-| `register(address)` | Registers a wallet to the whitelist |
-| `getRegistrants()` | Returns all registered wallet addresses |
-| `runRaffle(bytes32)` | Executes random winner selection |
-| `exportMerkleRoot()` | Generates Merkle root from winners list |
-| `checkRequirements(address)` | Verifies if wallet meets campaign requirements |
+Per-campaign contract deployed by the factory.
 
-## Technology Stack
+**Key Functions:**
 
-| Layer | Technology |
-|-------|------------|
-| Frontend Framework | React 18 |
-| Programming Language | TypeScript |
-| Build Tool | Vite |
-| Styling | TailwindCSS |
-| Web3 Library | Wagmi + Viem |
-| Wallet Connection | RainbowKit / MetaMask |
-| Routing | React Router DOM |
-| Smart Contracts | Solidity |
-| Blockchain | LitVM LiteForge (Chain ID: 4441) |
-| Date Formatting | date-fns |
-| Icons | Lucide React |
+```solidity
+// Register wallet to whitelist
+function register() external
 
-## Installation
+// Run raffle (creator only, after deadline)
+function runRaffle() external onlyCreator
+
+// View functions
+function getParams() external view returns (...)
+function getRegistrants() external view returns (address[] memory)
+function getWinners() external view returns (address[] memory)
+function isRegistered(address user) external view returns (bool)
+function isWinner(address user) external view returns (bool)
+function isActive() external view returns (bool)
+function slotsRemaining() external view returns (uint256)
+function registrantCount() external view returns (uint256)
+```
+
+**CampaignInfo Struct:**
+
+```solidity
+struct CampaignInfo {
+    string name;
+    string description;
+    string bannerImage;       // IPFS CID or URL
+    string twitter;
+    string discord;
+    string website;
+    uint256 totalSlots;
+    uint256 deadline;         // Unix timestamp
+    uint8 selectionMode;      // 0 = FCFS, 1 = Raffle
+    uint256 minTransactions;  // min tx count on LiteForge
+    uint256 minWalletAgeDays; // min wallet age in days
+    address requiredToken;    // 0x0 = none
+    uint8 tokenType;          // 0=none, 1=ERC721, 2=ERC20
+    uint256 minTokenBalance;
+    uint256 tokenId;
+    bool isPro;
+    bool isFeatured;
+    address creatorAddress;
+    uint256 createdAt;
+}
+```
+
+---
+
+## 🛠️ Technology Stack
+
+| Layer | Technology | Version |
+|-------|------------|---------|
+| Frontend | React | 18.3.1 |
+| Language | TypeScript | 5.6.3 |
+| Build Tool | Vite | 5.4.10 |
+| Styling | TailwindCSS | 3.4.14 |
+| Web3 Library | Wagmi + Viem | 2.12.7 + 2.21.0 |
+| State Management | Zustand | 4.5.5 |
+| Routing | React Router DOM | 6.26.2 |
+| Animations | Framer Motion | 11.12.0 |
+| Icons | Lucide React | 0.460.0 |
+| Date Utils | date-fns | 3.6.0 |
+| Smart Contracts | Solidity | 0.8.20 |
+| Blockchain | LitVM LiteForge | Chain ID: 4441 |
+| Deployment | Vercel | — |
+
+---
+
+## 🚀 Installation
 
 ### Prerequisites
 
-- Node.js (version 18 or higher)
-- npm or yarn package manager
+- Node.js **v18 or v20** (not v24 — incompatible with Vite 5)
+- npm package manager
 - MetaMask or any EVM-compatible wallet
+- zkLTC from [faucet](https://liteforge.hub.caldera.xyz) for gas
 
-### Steps
-
-Clone the repository:
+### Clone & Install
 
 ```bash
+# Clone repository
 git clone https://github.com/ffffffffhugfadil/litducks.git
 cd litducks
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173) in your browser.
+
+### Build for Production
+
+```bash
+npm run build
+npm run preview
+```
+
+### Add LiteForge Network to MetaMask
+
+| Field | Value |
+|-------|-------|
+| Network Name | LitVM LiteForge |
+| RPC URL | https://liteforge.rpc.caldera.xyz/http |
+| Chain ID | 4441 |
+| Currency Symbol | zkLTC |
+| Block Explorer | https://liteforge.explorer.caldera.xyz |
+
+---
+
+## 🔐 Environment Variables
+
+Create a `.env` file in the root directory:
+
+```env
+# LiteForge Testnet (Chain ID: 4441)
+VITE_FACTORY_ADDRESS=0xdDC8255958463A7BF7dC19657800201a1f8a00B6
+VITE_RPC_URL=https://liteforge.rpc.caldera.xyz/http
+
+# Optional: Pinata IPFS for banner image uploads
+VITE_PINATA_JWT=your_pinata_jwt_token_here
+```
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `VITE_FACTORY_ADDRESS` | Deployed factory contract address | ✅ |
+| `VITE_RPC_URL` | LiteForge RPC endpoint | ✅ |
+| `VITE_PINATA_JWT` | Pinata JWT for IPFS uploads | Optional |
+
+---
+
+## 📖 Usage Guide
+
+### For Project Creators
+
+**Step 1 — Connect Wallet**
+```
+Connect MetaMask → Switch to LiteForge (Chain ID: 4441) → Get zkLTC from faucet
+```
+
+**Step 2 — Create Campaign**
+```
+/create → Fill info → Set requirements → Deploy
+```
+
+**Campaign Configuration:**
+```
+Name           : Your project name
+Description    : What users need to know
+Banner Image   : IPFS CID or HTTP URL (optional)
+Total Slots    : ≤100 = Free Tier | >100 = Pro Tier
+Deadline       : Unix timestamp (future date)
+Selection Mode : 0 = FCFS | 1 = Raffle
+Min Tx Count   : Minimum transactions on LiteForge
+Min Wallet Age : Minimum wallet age in days
+Required Token : Token/NFT contract address (optional)
+```
+
+**Step 3 — Share & Monitor**
+```
+Share campaign link → Monitor via /dashboard → Export CSV/Merkle root
+```
+
+### For Users
+
+**Step 1 — Browse** → `/explore`
+
+**Step 2 — Connect Wallet** → MetaMask on LiteForge testnet
+
+**Step 3 — Check Requirements** → System auto-verifies your wallet
+
+**Step 4 — Register** → Click register → Confirm transaction
+
+**Step 5 — Track** → View registrations at `/profile`
+
+---
+
+## 🌐 Deployment
+
+### Deploy to Vercel
+
+```bash
+# 1. Push to GitHub
+git add .
+git commit -m "ready for deployment"
+git push origin main
+
+# 2. Connect to Vercel at vercel.com/new
+# 3. Add environment variables
+# 4. Deploy
+```
+
+**Vercel Environment Variables:**
+
+| Key | Value |
+|-----|-------|
+| `VITE_FACTORY_ADDRESS` | `0xdDC8255958463A7BF7dC19657800201a1f8a00B6` |
+| `VITE_RPC_URL` | `https://liteforge.rpc.caldera.xyz/http` |
+
+**vercel.json** (already included):
+```json
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "installCommand": "npm install"
+}
+```
+
+**.nvmrc** (already included):
+```
+20.17.0
+```
+
+---
+
+## 🔗 Live Demo
+
+| Link | URL |
+|------|-----|
+| **Live App** | https://litducks.xyz |
+| **Documentation** | https://litducks.xyz/docs |
+| **Explore Campaigns** | https://litducks.xyz/explore |
+| **Create Campaign** | https://litducks.xyz/create |
+| **Factory Contract** | https://liteforge.explorer.caldera.xyz/address/0xdDC8255958463A7BF7dC19657800201a1f8a00B6 |
+| **GitHub** | https://github.com/ffffffffhugfadil/litducks |
+| **Twitter** | https://x.com/litducksnft |
+
+---
+
+## 📁 Repository Structure
+
+```
+litducks/
+├── public/
+│   ├── duck-icon.svg           # App favicon/logo
+│   └── ...
+├── src/
+│   ├── components/
+│   │   ├── campaigns/
+│   │   │   └── CampaignCard.tsx
+│   │   ├── create/
+│   │   │   ├── Step1.tsx       # Basic info
+│   │   │   ├── Step2.tsx       # WL settings
+│   │   │   ├── Step3.tsx       # Requirements
+│   │   │   └── Step4.tsx       # Deploy
+│   │   └── layout/
+│   │       ├── Navbar.tsx
+│   │       ├── Footer.tsx
+│   │       └── ConnectWallet.tsx
+│   ├── lib/
+│   │   └── wagmi.ts            # Chain config + wagmi setup
+│   ├── pages/
+│   │   ├── HomePage.tsx
+│   │   ├── CreatePage.tsx
+│   │   ├── ExplorePage.tsx
+│   │   ├── CampaignPage.tsx
+│   │   ├── DashboardPage.tsx
+│   │   ├── ProfilePage.tsx
+│   │   └── docs/
+│   │       └── Docs.tsx        # Combined Overview + Guide
+│   ├── store/
+│   │   └── useStore.ts         # Zustand store
+│   ├── types/
+│   │   └── index.ts            # TypeScript types
+│   ├── App.tsx                 # Router setup
+│   ├── main.tsx                # Entry point
+│   └── index.css               # Global styles
+├── contracts/
+│   ├── LitDucksFactory.sol     # Factory contract
+│   └── LitDucksCampaign.sol    # Campaign contract
+├── .env.example                # Environment template
+├── .nvmrc                      # Node version pin (20.17.0)
+├── vercel.json                 # Vercel deployment config
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+├── tailwind.config.js
+├── postcss.config.js
+└── README.md
+```
+
+---
+
+## 🏆 Hackathon Submission
+
+| Field | Value |
+|-------|-------|
+| **Event** | LiteForge Hackathon 2026 |
+| **Track** | Open Track |
+| **Team** | @litducksnft |
+| **Live App** | https://litducks.xyz |
+| **GitHub** | https://github.com/ffffffffhugfadil/litducks |
+
+**Why LitDucks fits "Hard Money Web3 alignment":**
+- Built natively on LitVM LiteForge testnet
+- Serves the ecosystem — every LitVM project needs WL management
+- No centralized database — all data lives on-chain
+- Contributes real utility to the Litecoin ecosystem
+- First of its kind on LitVM — no competing solution exists
+
+---
+
+## 🤝 Contributing
+
+This project was built for the LiteForge Hackathon.
+
+For questions, feedback, or bug reports:
+- Twitter: [@litducksnft](https://x.com/litducksnft)
+- LVC Discord: `#liteforge-hackathon` channel
+- GitHub Issues: [Open an issue](https://github.com/ffffffffhugfadil/litducks/issues)
+
+---
+
+## 📄 License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- **LiteForge Hackathon** organizers and judges
+- **LitVM team** for building the testnet infrastructure
+- **@circle_crypto** (LitecoinVM Co-founder) for guidance
+- **@LitecoinVM** for supporting builders in the ecosystem
+- **Dappit** for AI-powered no-code development tools
+- **Caldera** for RPC and explorer infrastructure
+
+---
+
+<div align="center">
+
+Built with 🦆 for the **LiteForge Hackathon 2026**
+
+**LitVM LiteForge Testnet | Chain ID: 4441 | zkLTC**
+
+[litducks.xyz](https://litducks.xyz) · [@litducksnft](https://x.com/litducksnft)
+
+</div>
