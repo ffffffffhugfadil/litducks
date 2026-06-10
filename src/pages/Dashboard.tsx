@@ -204,8 +204,7 @@ export default function Dashboard() {
     return (
       <div className="min-h-screen pt-24 flex items-center justify-center">
         <div className="text-center">
-          {/* ✅ Pakai gambar dari folder public */}
-          <img src="/duck-icon.svg" alt="Duck" className="w-16 h-16 mx-auto mb-4 text-primary" />
+          <img src="/duck-icon.svg" alt="Duck" className="w-16 h-16 mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-2">Connect Your Wallet</h2>
           <p className="text-gray-400">Please connect your wallet to view your campaigns</p>
         </div>
@@ -246,7 +245,6 @@ export default function Dashboard() {
             </div>
           ) : campaigns.length === 0 ? (
             <div className="text-center py-16 bg-surface border border-border rounded-2xl">
-              {/* ✅ Pakai gambar dari folder public */}
               <img src="/duck-icon.svg" alt="Duck" className="w-12 h-12 mx-auto mb-3 opacity-40" />
               <p className="font-medium text-text mb-1">No campaigns yet</p>
               <p className="text-sm text-text-secondary mb-5">Create your first whitelist campaign</p>
@@ -260,7 +258,7 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-3">
               {campaigns.map(addr => (
-                <CampaignRow key={addr} address={addr} userAddress={address!} />
+                <CampaignRow key={addr} address={addr} userAddress={address} />
               ))}
             </div>
           )}
