@@ -11,11 +11,11 @@ import { CAMPAIGN_ABI } from '../config/contracts'
 
 type Filter = 'all' | 'live' | 'ended' | 'fcfs' | 'raffle'
 
-// Komponen wrapper untuk mendapatkan info campaign + filter
-function CampaignItemWithData({ address, filter, onDataLoaded }: { 
+// Komponen wrapper untuk mendapatkan info campaign
+function CampaignItemWithData({ address, filter, onNameLoaded }: { 
   address: string; 
   filter: Filter;
-  onDataLoaded?: (address: string) => void 
+  onNameLoaded?: (address: string, name: string) => void 
 }) {
   const { data: selectionMode, isLoading: loadingMode } = useReadContract({
     address: address as `0x${string}`,
@@ -29,14 +29,20 @@ function CampaignItemWithData({ address, filter, onDataLoaded }: {
     functionName: 'isActive',
   })
   
-  const isLoading = loadingMode || loadingActive
+  const { data: name, isLoading: loadingName } = useReadContract({
+    address: address as `0x${string}`,
+    abi: CAMPAIGN_ABI,
+    functionName: 'name',
+  })
   
-  // Notifikasi ke parent bahwa data sudah loaded
+  const isLoading = loadingMode || loadingActive || loadingName
+  
+  // Kirim nama campaign ke parent untuk search
   useEffect(() => {
-    if (!isLoading && onDataLoaded) {
-      onDataLoaded(address)
+    if (name && !loadingName && onNameLoaded) {
+      onNameLoaded(address, name as string)
     }
-  }, [isLoading, address, onDataLoaded])
+  }, [name, loadingName, address, onNameLoaded])
   
   // Logika filter
   let shouldShow = true
@@ -72,24 +78,43 @@ export default function Explore() {
   const { factoryAddress } = useWalletStore()
   const { allCampaigns, loadingCampaigns } = useFactory()
   const [search, setSearch] = useState('')
+  const [searchType, setSearchType] = useState<'address' | 'name'>('name') // ✅ Default ke name
   const [filter, setFilter] = useState<Filter>('all')
   const [currentPage, setCurrentPage] = useState(1)
+  const [campaignNames, setCampaignNames] = useState<Map<string, string>>(new Map())
   const itemsPerPage = 12
 
   const campaigns = allCampaigns ?? []
 
-  // ✅ Sama seperti di Dashboard: cukup balik urutan
+  // Kumpulkan nama campaign
+  const handleNameLoaded = (address: string, name: string) => {
+    setCampaignNames(prev => {
+      if (prev.get(address) === name) return prev
+      const newMap = new Map(prev)
+      newMap.set(address, name)
+      return newMap
+    })
+  }
+
+  // Urutkan campaign (terbaru di atas)
   const sortedCampaigns = useMemo(() => {
     return [...campaigns].reverse()
   }, [campaigns])
 
-  // Filter berdasarkan search
+  // ✅ Filter berdasarkan search (address ATAU name)
   const filteredBySearch = useMemo(() => {
     if (!search) return sortedCampaigns
-    return sortedCampaigns.filter(addr => 
-      addr.toLowerCase().includes(search.toLowerCase())
-    )
-  }, [sortedCampaigns, search])
+    
+    return sortedCampaigns.filter(addr => {
+      if (searchType === 'address') {
+        return addr.toLowerCase().includes(search.toLowerCase())
+      } else {
+        // Search by name
+        const name = campaignNames.get(addr)?.toLowerCase() || ''
+        return name.includes(search.toLowerCase())
+      }
+    })
+  }, [sortedCampaigns, search, searchType, campaignNames])
 
   // Pagination
   const totalPages = Math.ceil(filteredBySearch.length / itemsPerPage)
@@ -102,7 +127,7 @@ export default function Explore() {
   // Reset page ketika filter atau search berubah
   useEffect(() => {
     setCurrentPage(1)
-  }, [search, filter])
+  }, [search, searchType, filter])
 
   const filters: { key: Filter; label: string }[] = [
     { key: 'all', label: 'All' },
@@ -143,13 +168,35 @@ export default function Explore() {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search by address…"
-              className="w-full pl-9 pr-9 py-2.5 bg-surface border border-border focus:border-primary rounded-lg text-sm text-text placeholder-text-secondary outline-none transition-colors"
+              placeholder={searchType === 'name' ? "Search by campaign name..." : "Search by address..."}
+              className="w-full pl-9 pr-24 py-2.5 bg-surface border border-border focus:border-primary rounded-lg text-sm text-text placeholder-text-secondary outline-none transition-colors"
             />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+              <button
+                onClick={() => setSearchType('name')}
+                className={`px-2 py-1 rounded text-xs transition-colors ${
+                  searchType === 'name'
+                    ? 'bg-primary text-white'
+                    : 'bg-surface-2 text-text-secondary hover:text-text'
+                }`}
+              >
+                Name
+              </button>
+              <button
+                onClick={() => setSearchType('address')}
+                className={`px-2 py-1 rounded text-xs transition-colors ${
+                  searchType === 'address'
+                    ? 'bg-primary text-white'
+                    : 'bg-surface-2 text-text-secondary hover:text-text'
+                }`}
+              >
+                Address
+              </button>
+            </div>
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text"
+                className="absolute right-20 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -181,13 +228,20 @@ export default function Explore() {
           <div className="text-center py-20 text-text-secondary">
             <SlidersHorizontal className="w-10 h-10 mx-auto mb-3 opacity-30" />
             <p className="font-medium text-text mb-1">No campaigns found</p>
-            <p className="text-sm">Be the first to create a whitelist campaign on LiteForge.</p>
+            <p className="text-sm">
+              {search ? `No campaign matches "${search}"` : 'Be the first to create a whitelist campaign on LiteForge.'}
+            </p>
           </div>
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {paginatedCampaigns.map(addr => (
-                <CampaignItemWithData key={addr} address={addr} filter={filter} />
+                <CampaignItemWithData 
+                  key={addr} 
+                  address={addr} 
+                  filter={filter}
+                  onNameLoaded={handleNameLoaded}
+                />
               ))}
             </div>
 
