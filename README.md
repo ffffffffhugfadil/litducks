@@ -459,50 +459,74 @@ git push origin main
 litducks/
 ├── public/
 │   ├── duck-icon.svg           # App favicon/logo
-│   └── ...
+│   └── favicon.svg             # Website favicon
 ├── src/
 │   ├── components/
 │   │   ├── campaigns/
-│   │   │   └── CampaignCard.tsx
+│   │   │   ├── CampaignCard.tsx
+│   │   │   └── SkeletonCard.tsx # Loading state skeleton for campaigns
 │   │   ├── create/
-│   │   │   ├── Step1.tsx       # Basic info
-│   │   │   ├── Step2.tsx       # WL settings
-│   │   │   ├── Step3.tsx       # Requirements
-│   │   │   └── Step4.tsx       # Deploy
-│   │   └── layout/
-│   │       ├── Navbar.tsx
-│   │       ├── Footer.tsx
-│   │       └── ConnectWallet.tsx
+│   │   │   ├── Step1.tsx       # Basic campaign info form
+│   │   │   ├── Step2.tsx       # WL slots & deadline settings
+│   │   │   ├── Step3.tsx       # Requirements configuration
+│   │   │   └── Step4.tsx       # Campaign review & deployment
+│   │   ├── layout/
+│   │   │   ├── Navbar.tsx      # Top navigation bar
+│   │   │   └── Footer.tsx      # Footer with links
+│   │   ├── ui/
+│   │   │   └── FactoryAddressInput.tsx
+│   │   └── wallet/
+│   │       ├── ConnectButton.tsx # Wallet connection button
+│   │       ├── NetworkBadge.tsx  # Network status indicator
+│   │       └── NetworkGuard.tsx  # Network validation wrapper
+│   ├── config/
+│   │   └── contracts.ts        # Contract addresses & ABIs
+│   ├── hooks/
+│   │   ├── useCampaign.ts      # Campaign data & operations
+│   │   ├── useCreatorCampaigns.ts # Creator-specific campaigns data
+│   │   ├── useFactory.ts       # Factory contract interactions
+│   │   ├── useNetworkGuard.ts  # Network validation hook
+│   │   └── useRequirements.ts  # Requirement verification logic
 │   ├── lib/
-│   │   └── wagmi.ts            # Chain config + wagmi setup
+│   │   ├── blockscout.ts       # Blockscout explorer integrations
+│   │   ├── chain.ts            # Chain configuration
+│   │   ├── merkle.ts           # Merkle Tree generation for whitelists
+│   │   └── wagmi.ts            # Wagmi client setup
 │   ├── pages/
-│   │   ├── HomePage.tsx
-│   │   ├── CreatePage.tsx
-│   │   ├── ExplorePage.tsx
-│   │   ├── CampaignPage.tsx
-│   │   ├── DashboardPage.tsx
-│   │   ├── ProfilePage.tsx
+│   │   ├── Home.tsx            # Landing page
+│   │   ├── Create.tsx          # Campaign creation wizard
+│   │   ├── Explore.tsx         # Browse all campaigns
+│   │   ├── Campaign.tsx        # Single campaign detail
+│   │   ├── Dashboard.tsx       # Creator management panel
+│   │   ├── Profile.tsx         # User whitelist history
 │   │   └── docs/
-│   │       └── Docs.tsx        # Combined Overview + Guide
+│   │       └── Overview.tsx    # Documentation Overview & Guide
 │   ├── store/
-│   │   └── useStore.ts         # Zustand store
+│   │   ├── useCampaignStore.ts # Zustand store for campaign state
+│   │   └── useWalletStore.ts   # Zustand store for wallet state
 │   ├── types/
-│   │   └── index.ts            # TypeScript types
-│   ├── App.tsx                 # Router setup
+│   │   └── index.ts            # TypeScript type definitions
+│   ├── utils/
+│   │   └── ipfs.ts             # IPFS gateway helper
+│   ├── App.tsx                 # Main app component
 │   ├── main.tsx                # Entry point
-│   └── index.css               # Global styles
+│   ├── router.tsx              # React Router configuration
+│   └── index.css               # Global styles (Tailwind)
 ├── contracts/
 │   ├── LitDucksFactory.sol     # Factory contract
-│   └── LitDucksCampaign.sol    # Campaign contract
-├── .env.example                # Environment template
-├── .nvmrc                      # Node version pin (20.17.0)
+│   └── LitDucksCampaign.sol    # Individual campaign contract
+├── dist/                       # Production build output (Generated)
+├── node_modules/               # Installed npm packages (Ignored)
 ├── vercel.json                 # Vercel deployment config
-├── package.json
-├── tsconfig.json
-├── vite.config.ts
-├── tailwind.config.js
-├── postcss.config.js
-└── README.md
+├── package.json                # Dependencies & scripts
+├── package-lock.json           # Locked dependencies
+├── tsconfig.json               # TypeScript configuration
+├── tsconfig.node.json          # TypeScript Node config
+├── vite.config.ts              # Vite build configuration
+├── tailwind.config.js          # Tailwind CSS configuration
+├── postcss.config.js           # PostCSS configuration
+├── index.html                  # HTML entry point
+└── README.md                   # Project documentation
 ```
 
 ---
