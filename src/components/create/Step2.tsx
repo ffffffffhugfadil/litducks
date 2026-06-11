@@ -13,8 +13,7 @@ export default function Step2({ form, onChange }: Props) {
     .slice(0, 16)
 
   // Untuk demo/testing, kita set FREE=true (bisa diubah ke false kalau sudah production)
-  const IS_FREE_FOR_TESTING = true  // ✅ Set true untuk gratis, false untuk berbayar
-
+  const IS_FREE_FOR_TESTING = true  // 
   return (
     <div className="space-y-5">
       {/* Pilihan Mode: FCFS atau Raffle */}
@@ -65,11 +64,11 @@ export default function Step2({ form, onChange }: Props) {
         
         {form.totalSlots <= 100 ? (
           <p className="text-xs text-success mt-1.5 flex items-center gap-1">
-            ✅ Free Tier Active (Max 100 slots - FREE)
+             Free Tier Active (Max 100 slots - FREE)
           </p>
         ) : (
           <p className="text-xs text-warning mt-1.5 flex items-center gap-1">
-            ⚠️ More than 100 slots requires Pro tier
+             More than 100 slots requires Pro tier
           </p>
         )}
       </div>
@@ -116,7 +115,7 @@ export default function Step2({ form, onChange }: Props) {
               {form.totalSlots > 100 
                 ? 'Automatically active because slots > 100' 
                 : IS_FREE_FOR_TESTING
-                  ? '🎉 FREE for testing! (Originally 0.5 zkLTC)'
+                  ? ' FREE for testing! (Originally 0.5 zkLTC)'
                   : 'Unlimited WL slots (Free for ≤ 100 slots)'}
             </p>
           </div>
@@ -127,7 +126,7 @@ export default function Step2({ form, onChange }: Props) {
       {IS_FREE_FOR_TESTING && (
         <div className="mt-4 p-3 bg-success/10 border border-success/20 rounded-lg text-center">
           <p className="text-xs text-success font-medium">
-            🎉 HACKATHON MODE: Pro features are FREE!
+             HACKATHON MODE: Pro features are FREE!
           </p>
           <p className="text-xs text-text-secondary mt-1">
             Original: Pro = 0.5 zkLTC
