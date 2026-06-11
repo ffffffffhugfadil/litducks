@@ -1,4 +1,4 @@
-// src/pages/Dashboard.tsx - FIXED (tidak reload terus)
+// src/pages/Dashboard.tsx - WITH SKELETON LOADING
 
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { Link } from 'react-router-dom'
@@ -37,6 +37,37 @@ function FCFSIcon({ className = "w-3 h-3" }: { className?: string }) {
   )
 }
 
+// Skeleton Components
+function CampaignRowSkeleton() {
+  return (
+    <div className="bg-surface border border-border rounded-xl overflow-hidden animate-pulse">
+      <div className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-16 h-5 bg-gray-700 rounded-full"></div>
+              <div className="w-32 h-5 bg-gray-700 rounded"></div>
+              <div className="w-12 h-5 bg-gray-700 rounded-full"></div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="w-24 h-4 bg-gray-700 rounded"></div>
+              <div className="w-24 h-4 bg-gray-700 rounded"></div>
+              <div className="w-24 h-4 bg-gray-700 rounded"></div>
+            </div>
+          </div>
+          <div className="w-8 h-8 bg-gray-700 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FilterButtonSkeleton() {
+  return (
+    <div className="h-8 w-20 bg-gray-700 rounded-lg animate-pulse"></div>
+  )
+}
+
 // Interface untuk campaign summary
 interface CampaignSummary {
   address: string
@@ -54,8 +85,6 @@ let globalCache = new Map<string, {
 }>()
 
 let isFetchingInProgress = false
-let fetchPromise: Promise<void> | null = null
-
 const CACHE_EXPIRY = 5 * 60 * 1000 // 5 menit
 
 function CampaignRow({ address, userAddress }: { address: string; userAddress: string }) {
@@ -472,6 +501,7 @@ export default function Dashboard() {
         setCampaignsStatus(statusMap)
         setIsLoadingStatus(false)
         setHasLoadedOnce(true)
+        isFetchingInProgress = false
         return
       }
       
@@ -538,7 +568,6 @@ export default function Dashboard() {
     } finally {
       setIsLoadingStatus(false)
       isFetchingInProgress = false
-      fetchPromise = null
     }
   }, [publicClient, campaigns])
 
@@ -549,11 +578,10 @@ export default function Dashboard() {
     }
   }, [campaigns, fetchAllCampaignsStatus, hasLoadedOnce])
 
-  // Filter campaigns berdasarkan status (tanpa loading ulang)
+  // Filter campaigns berdasarkan status
   const filteredCampaigns = useMemo(() => {
     let filtered = [...campaigns]
     
-    // Jika belum loading status, tampilkan semua dulu
     if (campaignsStatus.size === 0 && campaigns.length > 0 && isLoadingStatus) {
       return []
     }
@@ -604,7 +632,7 @@ export default function Dashboard() {
     setCurrentPage(1)
   }
 
-  // Hitung count untuk setiap filter (pakai data yang sudah ada)
+  // Hitung count untuk setiap filter
   const filterCounts = useMemo(() => {
     const counts = {
       all: campaigns.length,
@@ -648,18 +676,13 @@ export default function Dashboard() {
     )
   }
 
-  // Loading state hanya pertama kali
-  if (isLoading || (campaigns.length > 0 && campaignsStatus.size === 0 && isLoadingStatus && !hasLoadedOnce)) {
-    return (
-      <div className="min-h-screen pt-24 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-      </div>
-    )
-  }
+  // ============ SKELETON LOADING - TAMPILKAN HALAMAN DULU ============
+  const showSkeleton = isLoading || (campaigns.length > 0 && campaignsStatus.size === 0 && isLoadingStatus && !hasLoadedOnce)
 
   return (
     <div className="min-h-screen pt-24 pb-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        {/* Header - selalu terlihat */}
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-text mb-1">Dashboard</h1>
@@ -673,43 +696,57 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* Filter Section */}
+        {/* Filter Section - skeleton atau asli */}
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
             <Filter className="w-4 h-4 text-text-secondary" />
             <h2 className="text-lg font-semibold text-text">Filter Campaigns</h2>
-            <span className="text-xs text-text-secondary bg-surface-2 px-2 py-0.5 rounded-full">
-              {filterCounts.all} total
-            </span>
+            {!showSkeleton && (
+              <span className="text-xs text-text-secondary bg-surface-2 px-2 py-0.5 rounded-full">
+                {filterCounts.all} total
+              </span>
+            )}
           </div>
           
           <div className="flex flex-wrap gap-2">
-            {filterButtons.map((btn) => (
-              <button
-                key={btn.key}
-                onClick={() => handleFilterChange(btn.key as typeof filter)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all duration-200 ${
-                  filter === btn.key
-                    ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                    : 'bg-surface-2 text-text-secondary hover:text-text hover:bg-surface border border-border'
-                }`}
-              >
-                {btn.icon}
-                {btn.label}
-                <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${
-                  filter === btn.key
-                    ? 'bg-white/20 text-white'
-                    : 'bg-surface-2 text-text-secondary'
-                }`}>
-                  {btn.count}
-                </span>
-              </button>
-            ))}
+            {showSkeleton ? (
+              // Skeleton untuk filter buttons
+              <>
+                <FilterButtonSkeleton />
+                <FilterButtonSkeleton />
+                <FilterButtonSkeleton />
+                <FilterButtonSkeleton />
+                <FilterButtonSkeleton />
+              </>
+            ) : (
+              filterButtons.map((btn) => (
+                <button
+                  key={btn.key}
+                  onClick={() => handleFilterChange(btn.key as typeof filter)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all duration-200 ${
+                    filter === btn.key
+                      ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                      : 'bg-surface-2 text-text-secondary hover:text-text hover:bg-surface border border-border'
+                  }`}
+                >
+                  {btn.icon}
+                  {btn.label}
+                  <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${
+                    filter === btn.key
+                      ? 'bg-white/20 text-white'
+                      : 'bg-surface-2 text-text-secondary'
+                  }`}>
+                    {btn.count}
+                  </span>
+                </button>
+              ))
+            )}
           </div>
         </div>
 
         <NetworkGuard>
-          {error ? (
+          {/* Error state */}
+          {error && !showSkeleton ? (
             <div className="text-center py-12 bg-error/10 rounded-xl">
               <p className="text-error text-sm">Error loading campaigns: {error.message}</p>
               <button 
@@ -719,7 +756,18 @@ export default function Dashboard() {
                 Try Again
               </button>
             </div>
+          ) : showSkeleton ? (
+            // ============ SKELETON LOADING ============
+            <div className="space-y-3">
+              <CampaignRowSkeleton />
+              <CampaignRowSkeleton />
+              <CampaignRowSkeleton />
+              <div className="flex justify-center mt-4">
+                <div className="w-32 h-8 bg-gray-700 rounded-lg animate-pulse"></div>
+              </div>
+            </div>
           ) : paginatedCampaigns.length === 0 ? (
+            // Empty state
             <div className="text-center py-16 bg-surface border border-border rounded-2xl">
               <img src="/duck-icon.svg" alt="Duck" className="w-12 h-12 mx-auto mb-3 opacity-40" />
               <p className="font-medium text-text mb-1">
@@ -746,6 +794,7 @@ export default function Dashboard() {
               </Link>
             </div>
           ) : (
+            // ============ DATA ASLI ============
             <>
               <div className="space-y-3">
                 {paginatedCampaigns.map((addr) => (
