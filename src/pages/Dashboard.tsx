@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // src/pages/Dashboard.tsx
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { Link } from 'react-router-dom'
@@ -5,9 +6,20 @@ import { useState, useEffect, useMemo } from 'react'
 import { FACTORY_ADDRESS, FACTORY_ABI } from '../config/contracts'  
 import { CAMPAIGN_ABI } from '../config/contracts'  
 import { Download, Trophy, Users, Calendar, ExternalLink, Loader2, PlusCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+=======
+// src/pages/Dashboard.tsx - WITH WORKING FILTERS
+
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { Link } from 'react-router-dom'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { FACTORY_ADDRESS, FACTORY_ABI } from '../config/contracts'  
+import { CAMPAIGN_ABI } from '../config/contracts'  
+import { Download, Trophy, Users, Calendar, ExternalLink, Loader2, PlusCircle, ChevronLeft, ChevronRight, CheckCircle, Filter, Clock } from 'lucide-react'
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
 import { formatDistanceToNow } from 'date-fns'
 import NetworkGuard from '../components/wallet/NetworkGuard'
 import { EXPLORER_URL } from '../lib/chain'
+import { usePublicClient } from 'wagmi'
 
 function shortAddr(addr: string) {
   if (!addr) return ''
@@ -35,6 +47,27 @@ function FCFSIcon({ className = "w-3 h-3" }: { className?: string }) {
   )
 }
 
+<<<<<<< HEAD
+=======
+// Interface untuk campaign summary
+interface CampaignSummary {
+  address: string
+  isActive: boolean
+  isRaffleMode: boolean
+  isCompleted: boolean
+}
+
+// Cache untuk campaign data
+const campaignStatusCache = new Map<string, {
+  isActive: boolean
+  isRaffleMode: boolean
+  isCompleted: boolean
+  timestamp: number
+}>()
+
+const CACHE_EXPIRY = 2 * 60 * 1000 // 2 menit
+
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
 function CampaignRow({ address, userAddress }: { address: string; userAddress: string }) {
   const [expanded, setExpanded] = useState(false)
   const [winnersList, setWinnersList] = useState<string[]>([])
@@ -111,6 +144,7 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
     address: address as `0x${string}`,
     abi: CAMPAIGN_ABI,
     functionName: 'getWinners',
+<<<<<<< HEAD
     query: { enabled: expanded && raffleRun === true },
   })
 
@@ -136,13 +170,48 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
   const canRunRaffle = isOwner && isRaffleMode && isPastDeadline && isActive && !isRaffleCompleted && hasRegistrants
 
   if (!isOwner) return null
+=======
+    query: { enabled: expanded },
+  })
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
 
+  // ============ WRITE CONTRACT ============
+  const { writeContract, data: txHash, isPending, error: writeError } = useWriteContract()
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash })
+
+  // ============ DATA PROCESSING ============
+  useEffect(() => {
+    if (winnersData && Array.isArray(winnersData)) {
+      setWinnersList(winnersData as string[])
+    }
+  }, [winnersData])
+
+  const isOwner = creator && userAddress && creator.toLowerCase() === userAddress.toLowerCase()
+  const isRaffleMode = selectionMode === 1
+  const isRaffleCompleted = raffleRun === true
+  const deadlineNum = Number(deadline ?? 0)
+  const deadlineDate = deadlineNum > 0 ? new Date(deadlineNum * 1000) : null
+  const isPastDeadline = deadlineDate ? deadlineDate < new Date() : false
+  
   const totalSlotsNum = Number(totalSlots ?? 0)
   const registered = Number(registrantCount ?? 0)
   const winners = Number(winnerCount ?? 0)
   const active = isActive ?? false
   const registrantAddresses = registrants as `0x${string}`[] | undefined
 
+<<<<<<< HEAD
+=======
+  // Untuk FCFS: cek apakah campaign sudah selesai (full atau lewat deadline)
+  const isFCFSCompleted = !isRaffleMode && (!active || registered >= totalSlotsNum || isPastDeadline)
+  const hasRegistrants = registrantAddresses && registrantAddresses.length > 0
+  
+  // Untuk FCFS: winners adalah semua registrants (karena FCFS auto-win)
+  const fcfsWinnersList = isFCFSCompleted && registrantAddresses ? registrantAddresses : []
+  
+  // Tampilkan winners list (Raffle winners atau FCFS registrants)
+  const displayWinners = isRaffleMode ? winnersList : fcfsWinnersList
+
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
   const handleRunRaffle = () => {
     const emptyMerkle = "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`
     writeContract({ 
@@ -166,8 +235,13 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
   }
 
   const exportWinnersCSV = () => {
+<<<<<<< HEAD
     if (!winnersList || winnersList.length === 0) return
     const csv = ['address,winner_number', ...winnersList.map((addr, i) => `${addr},${i + 1}`)].join('\n')
+=======
+    if (!displayWinners || displayWinners.length === 0) return
+    const csv = ['address,winner_number', ...displayWinners.map((addr, i) => `${addr},${i + 1}`)].join('\n')
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -177,14 +251,33 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
     URL.revokeObjectURL(url)
   }
 
+<<<<<<< HEAD
+=======
+  if (!isOwner) return null
+
+  // Determine campaign status for filtering
+  const isCampaignLive = active && !isPastDeadline && (!isRaffleMode || (isRaffleMode && !isRaffleCompleted))
+  const isCampaignEnded = !isCampaignLive
+  const isRaffleType = isRaffleMode
+  const isFCFSType = !isRaffleMode
+
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
   return (
-    <div className="bg-surface border border-border rounded-xl overflow-hidden">
+    <div 
+      className="bg-surface border border-border rounded-xl overflow-hidden"
+      data-status={isCampaignLive ? 'live' : 'ended'}
+      data-type={isRaffleType ? 'raffle' : 'fcfs'}
+    >
       <div
         className="p-4 flex items-center justify-between cursor-pointer hover:bg-surface-2 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex-1 min-w-0">
+<<<<<<< HEAD
           <div className="flex items-center gap-2 mb-1">
+=======
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
             {isRaffleMode ? (
               <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 flex items-center gap-1">
                 <RaffleIcon className="w-3 h-3" /> Raffle
@@ -202,9 +295,20 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
             }`}>
               {!active ? 'Ended' : 'Live'}
             </span>
+<<<<<<< HEAD
             {isRaffleMode && isRaffleCompleted && (
               <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">
                 Raffle Complete
+=======
+            {!isRaffleMode && isFCFSCompleted && (
+              <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" /> Completed
+              </span>
+            )}
+            {isRaffleMode && isRaffleCompleted && (
+              <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" /> Raffle Complete
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
               </span>
             )}
           </div>
@@ -213,7 +317,7 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
               <Users className="w-3 h-3" /> {registered}/{totalSlotsNum}
             </span>
             <span className="flex items-center gap-1">
-              <Trophy className="w-3 h-3" /> {winners} winners
+              <Trophy className="w-3 h-3" /> {isRaffleMode ? winners : (isFCFSCompleted ? registered : 0)} winners
             </span>
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
@@ -254,7 +358,11 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
               ) : (
                 <button
                   onClick={handleRunRaffle}
+<<<<<<< HEAD
                   disabled={isPending || isConfirming || !canRunRaffle}
+=======
+                  disabled={isPending || isConfirming || !hasRegistrants}
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
                   className="w-full py-2 bg-purple-500/20 border border-purple-500/30 text-purple-400 rounded-lg text-sm font-medium hover:bg-purple-500/30 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isPending || isConfirming ? (
@@ -273,6 +381,7 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
             </div>
           )}
 
+<<<<<<< HEAD
           {isRaffleMode && isRaffleCompleted && (
             <div className="mb-3 p-2 bg-success/10 border border-success/20 rounded-lg text-center">
               <p className="text-xs text-success">🎲 Raffle completed! {winners} winners selected</p>
@@ -283,10 +392,40 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
           <div className="flex gap-2">
             {/* Export Registrants - hanya untuk FCFS */}
             {!isRaffleMode && registrantAddresses && registrantAddresses.length > 0 && (
+=======
+          {/* FCFS Completion Info */}
+          {!isRaffleMode && isFCFSCompleted && (
+            <div className="mb-3 p-2 bg-green-500/10 border border-green-500/20 rounded-lg text-center">
+              <p className="text-xs text-green-400">
+                ✅ Campaign completed! {registered} registrants are winners.
+                {registered >= totalSlotsNum 
+                  ? ` All ${totalSlotsNum} slots filled.` 
+                  : ` Deadline has passed.`}
+              </p>
+            </div>
+          )}
+
+          {/* Status Info untuk FCFS yang masih aktif */}
+          {!isRaffleMode && !isFCFSCompleted && (
+            <div className="mb-3 p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg text-center">
+              <p className="text-xs text-blue-400">
+                 FCFS Mode - First come first served
+                {registered < totalSlotsNum 
+                  ? ` ${totalSlotsNum - registered} slots remaining` 
+                  : ` All slots filled - campaign complete`}
+              </p>
+            </div>
+          )}
+          
+          {/* Tombol Export */}
+          <div className="flex gap-2 flex-wrap">
+            {registrantAddresses && registrantAddresses.length > 0 && (
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
               <button
                 onClick={exportCSV}
                 className="px-3 py-1.5 bg-surface-2 border border-border rounded-lg text-xs text-text-secondary hover:text-primary transition-colors flex items-center gap-1"
               >
+<<<<<<< HEAD
                 <Download className="w-3 h-3" /> Export CSV
               </button>
             )}
@@ -298,6 +437,22 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
                 className="px-3 py-1.5 bg-purple-500/20 border border-purple-500/30 rounded-lg text-xs text-purple-400 hover:bg-purple-500/30 transition-colors flex items-center gap-1"
               >
                 <Download className="w-3 h-3" /> Export Winners ({winnersList.length})
+=======
+                <Download className="w-3 h-3" /> Export Registrants ({registrantAddresses.length})
+              </button>
+            )}
+            
+            {displayWinners.length > 0 && (
+              <button
+                onClick={exportWinnersCSV}
+                className={`px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-1 ${
+                  isRaffleMode 
+                    ? 'bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30'
+                    : 'bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500/30'
+                }`}
+              >
+                <Download className="w-3 h-3" /> Export Winners ({displayWinners.length})
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
               </button>
             )}
           </div>
@@ -313,6 +468,11 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
                       <span className="text-xs text-text-secondary">{i + 1}.</span>
                       <span className="font-mono text-xs text-text">{shortAddr(addr)}</span>
                     </div>
+                    {!isRaffleMode && isFCFSCompleted && (
+                      <span className="text-xs text-green-400 flex items-center gap-1">
+                        <Trophy className="w-3 h-3" /> Winner
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -321,12 +481,24 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
             <p className="text-xs text-text-secondary text-center py-2">No registrants yet</p>
           )}
 
+<<<<<<< HEAD
           {/* Daftar Winners (jika raffle selesai) */}
           {isRaffleMode && isRaffleCompleted && winnersList.length > 0 && (
             <div>
               <p className="text-xs font-medium text-text mb-2">Winners ({winnersList.length})</p>
               <div className="space-y-1 max-h-48 overflow-y-auto">
                 {winnersList.map((addr, i) => (
+=======
+          {/* Daftar Winners */}
+          {displayWinners.length > 0 && !(isRaffleMode && !isRaffleCompleted) && (
+            <div>
+              <p className="text-xs font-medium text-text mb-2 flex items-center gap-2">
+                <Trophy className="w-3 h-3 text-yellow-400" />
+                Winners ({displayWinners.length})
+              </p>
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {displayWinners.map((addr, i) => (
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
                   <div key={addr} className="flex items-center justify-between px-3 py-1.5 bg-green-500/10 rounded-lg border border-green-500/20">
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-text-secondary">{i + 1}.</span>
@@ -353,7 +525,15 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
 
 export default function Dashboard() {
   const { address } = useAccount()
+<<<<<<< HEAD
   const [currentPage, setCurrentPage] = useState(1)
+=======
+  const publicClient = usePublicClient()
+  const [currentPage, setCurrentPage] = useState(1)
+  const [filter, setFilter] = useState<'all' | 'live' | 'ended' | 'raffle' | 'fcfs'>('all')
+  const [campaignsStatus, setCampaignsStatus] = useState<Map<string, CampaignSummary>>(new Map())
+  const [isLoadingStatus, setIsLoadingStatus] = useState(true)
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
   const itemsPerPage = 6
 
   const { data: creatorCampaigns, isLoading, error, refetch } = useReadContract({
@@ -366,6 +546,7 @@ export default function Dashboard() {
 
   const campaigns = (creatorCampaigns as string[]) ?? []
 
+<<<<<<< HEAD
   // Urutkan dari terbaru (reverse order)
   const sortedCampaigns = useMemo(() => {
     return [...campaigns].reverse()
@@ -383,6 +564,174 @@ export default function Dashboard() {
   useEffect(() => {
     setCurrentPage(1)
   }, [creatorCampaigns])
+=======
+  // Fetch status untuk semua campaign
+  const fetchAllCampaignsStatus = useCallback(async () => {
+    if (!publicClient || campaigns.length === 0) return
+    
+    setIsLoadingStatus(true)
+    const statusMap = new Map<string, CampaignSummary>()
+    
+    try {
+      for (const campaignAddr of campaigns) {
+        // Check cache dulu
+        const cached = campaignStatusCache.get(campaignAddr)
+        const now = Date.now()
+        
+        if (cached && (now - cached.timestamp) < CACHE_EXPIRY) {
+          statusMap.set(campaignAddr, {
+            address: campaignAddr,
+            isActive: cached.isActive,
+            isRaffleMode: cached.isRaffleMode,
+            isCompleted: cached.isCompleted,
+          })
+          continue
+        }
+        
+        // Fetch data dari contract
+        try {
+          const contract = { address: campaignAddr as `0x${string}`, abi: CAMPAIGN_ABI }
+          
+          const [isActive, selectionMode, deadline, totalSlots, registrantCount] = await Promise.all([
+            publicClient.readContract({ ...contract, functionName: 'isActive' }),
+            publicClient.readContract({ ...contract, functionName: 'selectionMode' }),
+            publicClient.readContract({ ...contract, functionName: 'deadline' }),
+            publicClient.readContract({ ...contract, functionName: 'totalSlots' }),
+            publicClient.readContract({ ...contract, functionName: 'registrantCount' }),
+          ])
+          
+          const isRaffleMode = selectionMode === 1
+          const deadlineNum = Number(deadline ?? 0)
+          const isPastDeadline = deadlineNum > 0 && deadlineNum * 1000 < Date.now()
+          const totalSlotsNum = Number(totalSlots ?? 0)
+          const registrantCountNum = Number(registrantCount ?? 0)
+          const isFull = registrantCountNum >= totalSlotsNum
+          
+          let isCompleted = false
+          if (isRaffleMode) {
+            const raffleRun = await publicClient.readContract({ ...contract, functionName: 'raffleRun' })
+            isCompleted = raffleRun === true
+          } else {
+            isCompleted = !isActive || isPastDeadline || isFull
+          }
+          
+          const summary: CampaignSummary = {
+            address: campaignAddr,
+            isActive: isActive as boolean,
+            isRaffleMode,
+            isCompleted,
+          }
+          
+          statusMap.set(campaignAddr, summary)
+          
+          // Simpan ke cache
+          campaignStatusCache.set(campaignAddr, {
+            isActive: summary.isActive,
+            isRaffleMode: summary.isRaffleMode,
+            isCompleted: summary.isCompleted,
+            timestamp: now,
+          })
+          
+        } catch (err) {
+          console.error(`Error fetching status for ${campaignAddr}:`, err)
+        }
+      }
+      
+      setCampaignsStatus(statusMap)
+    } catch (err) {
+      console.error('Error fetching campaigns status:', err)
+    } finally {
+      setIsLoadingStatus(false)
+    }
+  }, [publicClient, campaigns])
+
+  useEffect(() => {
+    if (campaigns.length > 0) {
+      fetchAllCampaignsStatus()
+    }
+  }, [campaigns, fetchAllCampaignsStatus])
+
+  // Filter campaigns berdasarkan status
+  const filteredCampaigns = useMemo(() => {
+    let filtered = [...campaigns]
+    
+    switch (filter) {
+      case 'live':
+        filtered = campaigns.filter(addr => {
+          const status = campaignsStatus.get(addr)
+          return status && status.isActive && !status.isCompleted
+        })
+        break
+      case 'ended':
+        filtered = campaigns.filter(addr => {
+          const status = campaignsStatus.get(addr)
+          return status && (!status.isActive || status.isCompleted)
+        })
+        break
+      case 'raffle':
+        filtered = campaigns.filter(addr => {
+          const status = campaignsStatus.get(addr)
+          return status && status.isRaffleMode
+        })
+        break
+      case 'fcfs':
+        filtered = campaigns.filter(addr => {
+          const status = campaignsStatus.get(addr)
+          return status && !status.isRaffleMode
+        })
+        break
+      default:
+        filtered = campaigns
+    }
+    
+    return filtered.reverse()
+  }, [campaigns, campaignsStatus, filter])
+
+  // Pagination
+  const totalPages = Math.ceil(filteredCampaigns.length / itemsPerPage)
+  const paginatedCampaigns = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    const end = start + itemsPerPage
+    return filteredCampaigns.slice(start, end)
+  }, [filteredCampaigns, currentPage])
+
+  // Reset page saat filter atau data berubah
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filter, creatorCampaigns])
+
+  // Hitung count untuk setiap filter
+  const filterCounts = useMemo(() => {
+    const counts = {
+      all: campaigns.length,
+      live: 0,
+      ended: 0,
+      raffle: 0,
+      fcfs: 0,
+    }
+    
+    campaigns.forEach(addr => {
+      const status = campaignsStatus.get(addr)
+      if (status) {
+        if (status.isActive && !status.isCompleted) counts.live++
+        else counts.ended++
+        
+        if (status.isRaffleMode) counts.raffle++
+        else counts.fcfs++
+      }
+    })
+    
+    return counts
+  }, [campaigns, campaignsStatus])
+
+  const filterButtons = [
+    { key: 'all', label: 'All', icon: null, count: filterCounts.all },
+    { key: 'live', label: 'Live', icon: <CheckCircle className="w-3 h-3" />, count: filterCounts.live },
+    { key: 'ended', label: 'Ended', icon: <Clock className="w-3 h-3" />, count: filterCounts.ended },
+    { key: 'raffle', label: 'Raffle', icon: <RaffleIcon className="w-3 h-3" />, count: filterCounts.raffle },
+    { key: 'fcfs', label: 'FCFS', icon: <FCFSIcon className="w-3 h-3" />, count: filterCounts.fcfs },
+  ]
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
 
   if (!address) {
     return (
@@ -395,6 +744,8 @@ export default function Dashboard() {
       </div>
     )
   }
+
+  const isLoadingState = isLoading || isLoadingStatus
 
   return (
     <div className="min-h-screen pt-24 pb-12">
@@ -412,8 +763,46 @@ export default function Dashboard() {
           </Link>
         </div>
 
+        {/* Filter Section */}
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Filter className="w-4 h-4 text-text-secondary" />
+            <h2 className="text-lg font-semibold text-text">Filter Campaigns</h2>
+            <span className="text-xs text-text-secondary bg-surface-2 px-2 py-0.5 rounded-full">
+              {filterCounts.all} total
+            </span>
+          </div>
+          
+          <div className="flex flex-wrap gap-2">
+            {filterButtons.map((btn) => (
+              <button
+                key={btn.key}
+                onClick={() => {
+                  setFilter(btn.key as typeof filter)
+                  setCurrentPage(1)
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all duration-200 ${
+                  filter === btn.key
+                    ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                    : 'bg-surface-2 text-text-secondary hover:text-text hover:bg-surface border border-border'
+                }`}
+              >
+                {btn.icon}
+                {btn.label}
+                <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${
+                  filter === btn.key
+                    ? 'bg-white/20 text-white'
+                    : 'bg-surface-2 text-text-secondary'
+                }`}>
+                  {btn.count}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <NetworkGuard>
-          {isLoading ? (
+          {isLoadingState ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-primary animate-spin" />
             </div>
@@ -430,8 +819,22 @@ export default function Dashboard() {
           ) : paginatedCampaigns.length === 0 ? (
             <div className="text-center py-16 bg-surface border border-border rounded-2xl">
               <img src="/duck-icon.svg" alt="Duck" className="w-12 h-12 mx-auto mb-3 opacity-40" />
-              <p className="font-medium text-text mb-1">No campaigns yet</p>
-              <p className="text-sm text-text-secondary mb-5">Create your first whitelist campaign</p>
+              <p className="font-medium text-text mb-1">
+                {filter === 'all' 
+                  ? 'No campaigns yet' 
+                  : filter === 'live'
+                    ? 'No live campaigns'
+                    : filter === 'ended'
+                      ? 'No ended campaigns'
+                      : filter === 'raffle'
+                        ? 'No raffle campaigns'
+                        : 'No FCFS campaigns'}
+              </p>
+              <p className="text-sm text-text-secondary mb-5">
+                {filter === 'all' 
+                  ? 'Create your first whitelist campaign' 
+                  : 'Try another filter or create a new campaign'}
+              </p>
               <Link
                 to="/create"
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-sm font-medium transition-colors"

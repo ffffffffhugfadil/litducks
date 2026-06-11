@@ -3,12 +3,17 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAccount } from 'wagmi'
 import { Compass, PlusCircle, LayoutDashboard, BookOpen } from 'lucide-react'
 import ConnectButton from '../wallet/ConnectButton'
-
+import { BarChart3 } from 'lucide-react'
 const links = [
   { to: '/explore', label: 'Explore', icon: Compass },
   { to: '/create', label: 'Create', icon: PlusCircle },
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+<<<<<<< HEAD
   { to: '/docs', label: 'Docs', icon: BookOpen },
+=======
+  { to: '/docs', label: 'Docs', icon: BookOpen },  
+  { to: '/analytics', label: 'Analytics', icon: BarChart3 },
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
 ]
 
 export default function Navbar() {

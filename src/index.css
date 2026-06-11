@@ -93,4 +93,8 @@
 
 .animate-slide-up {
   animation: slideUp 0.3s ease-out forwards;
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
