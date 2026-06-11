@@ -504,6 +504,7 @@ litducks/
 │   │   ├── Explore.tsx         # Browse all campaigns
 │   │   ├── Campaign.tsx        # Single campaign detail
 │   │   ├── Dashboard.tsx       # Creator management panel
+│   │   ├── Analytics.tsx       # Campaign performance analytics data
 │   │   ├── Profile.tsx         # User whitelist history
 │   │   └── docs/
 │   │       └── Overview.tsx    # Documentation Overview & Guide
