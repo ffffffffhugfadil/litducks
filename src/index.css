@@ -58,7 +58,6 @@
   }
 }
 
-/* ============ ANIMASI SHIMMER ============ */
 @keyframes shimmer {
   0% {
     background-position: -200% 0;
@@ -79,7 +78,6 @@
   background-size: 200% 100%;
 }
 
-/* ============ ANIMASI SLIDE UP (UNTUK TOAST) ============ */
 @keyframes slideUp {
   from {
     opacity: 0;
@@ -93,8 +91,5 @@
 
 .animate-slide-up {
   animation: slideUp 0.3s ease-out forwards;
-<<<<<<< HEAD
 }
-=======
 }
->>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
