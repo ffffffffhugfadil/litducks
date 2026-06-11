@@ -21,70 +21,54 @@ const STEPS = [
 ]
 
 function validate(step: number, form: ReturnType<typeof useCampaignStore.getState>['createForm']) {
-  // Step 1: Project Info
   if (step === 0) {
     return form.name.trim().length > 0
   }
   
-  // Step 2: WL Settings
   if (step === 1) {
     return form.totalSlots > 0 && form.deadline !== null
   }
   
-  // Step 3: Requirements
   if (step === 2) {
-    // Jika tidak ada contract address (opsional), boleh lanjut
     if (!form.requiredToken || !form.requiredToken.trim()) {
       return true
     }
     
-    // Jika ada contract address tapi tidak valid, jangan lanjut
     if (!isAddress(form.requiredToken)) {
       return false
     }
     
-    // Jika contract address valid tapi belum pilih tokenType, jangan lanjut
     if (!form.tokenType) {
       return false
     }
     
-    // Validasi berdasarkan tokenType yang dipilih
     if (form.tokenType === 'ERC20') {
-      // ERC-20: minTokenBalance harus ≥ 1
       return (form.minTokenBalance || 1) >= 1
     }
     
     if (form.tokenType === 'ERC721') {
       if (form.nftType === 'collection') {
-        // Collection NFT: minTokenBalance harus ≥ 1
         return (form.minTokenBalance || 1) >= 1
       }
       if (form.nftType === 'single') {
-        // Single NFT: tokenId harus diisi
         return form.tokenId && form.tokenId.trim().length > 0
       }
-      // Sudah pilih tokenType ERC721 tapi belum pilih nftType
       return false
     }
     
     if (form.tokenType === 'ERC1155') {
       if (form.nftType === 'collection') {
-        // Collection: minTokenBalance harus ≥ 1
         return (form.minTokenBalance || 1) >= 1
       }
       if (form.nftType === 'single') {
-        // Single: tokenId harus diisi DAN minTokenBalance ≥ 1
         return (form.tokenId && form.tokenId.trim().length > 0) && (form.minTokenBalance || 1) >= 1
       }
-      // Sudah pilih tokenType ERC1155 tapi belum pilih nftType
       return false
     }
     
-    // Jika tokenType tidak dikenal
     return false
   }
   
-  // Step 4: Deploy (selalu true, karena validasi sudah di tombol deploy)
   return true
 }
 
@@ -100,7 +84,6 @@ export default function Create() {
     isWritePending,
     isConfirming,
     isConfirmed,
-    txHash,
     writeError,
   } = useFactory()
 
@@ -119,16 +102,36 @@ export default function Create() {
     createCampaign(createForm)
   }
 
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen pt-24 flex items-center justify-center">
+        <div className="text-center">
+          <img 
+            src="/duck-icon.svg" 
+            alt="LitDucks" 
+            className="w-20 h-20 mx-auto mb-6"
+          />
+          <h2 className="text-2xl font-bold text-text mb-2">Wallet not connected</h2>
+          <p className="text-text-secondary">Please connect your wallet to create a campaign</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen pt-24 pb-12">
       <div className="max-w-2xl mx-auto px-4 sm:px-6">
-        <div className="mb-8">
+        <div className="mb-8 text-center">
+          <img 
+            src="/duck-icon.svg" 
+            alt="LitDucks" 
+            className="w-16 h-16 mx-auto mb-4"
+          />
           <h1 className="text-3xl font-bold text-text mb-1">Create Whitelist Campaign</h1>
           <p className="text-text-secondary text-sm">Deploy an on-chain WL campaign to LiteForge testnet</p>
         </div>
 
         <NetworkGuard>
-          {/* Factory address */}
           {!factoryAddress && (
             <div className="mb-6 p-4 bg-warning/5 border border-warning/20 rounded-xl">
               <p className="text-sm font-medium text-warning mb-2">Set factory address first</p>
@@ -136,7 +139,6 @@ export default function Create() {
             </div>
           )}
 
-          {/* Stepper */}
           <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-2">
             {STEPS.map((step, i) => (
               <div key={i} className="flex items-center gap-2 shrink-0">
@@ -161,7 +163,6 @@ export default function Create() {
             ))}
           </div>
 
-          {/* Form card */}
           <div className="bg-surface border border-border rounded-2xl overflow-hidden">
             <div className="p-6 border-b border-border">
               <h2 className="font-semibold text-text">{STEPS[createStep].label}</h2>
@@ -173,7 +174,6 @@ export default function Create() {
               {createStep === 3 && <Step4 form={createForm} proFee={proFee} featuredFee={featuredFee} />}
             </div>
 
-            {/* Error */}
             {writeError && (
               <div className="mx-6 mb-4 p-3 bg-error/10 border border-error/30 rounded-lg flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-error shrink-0 mt-0.5" />
@@ -181,7 +181,6 @@ export default function Create() {
               </div>
             )}
 
-            {/* Success */}
             {isConfirmed && (
               <div className="mx-6 mb-4 p-3 bg-success/10 border border-success/30 rounded-lg flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-success" />
@@ -189,7 +188,6 @@ export default function Create() {
               </div>
             )}
 
-            {/* Actions */}
             <div className="px-6 pb-6 flex justify-between">
               <button
                 onClick={() => setCreateStep(Math.max(0, createStep - 1))}
