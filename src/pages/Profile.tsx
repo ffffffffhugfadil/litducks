@@ -35,11 +35,6 @@ const RaffleIcon = ({ className = "w-3 h-3" }: { className?: string }) => (
   </svg>
 )
 
-<<<<<<< HEAD
-  const campaignName = (name as string) || 'Untitled Campaign'
-  const createdAtNum = Number(createdAt ?? 0)
-  const createdAtDate = createdAtNum > 0 ? new Date(createdAtNum * 1000) : new Date()
-=======
 interface CampaignHistoryData {
   address: string
   name: string
@@ -71,7 +66,6 @@ function ProcessedCampaignItem({ data }: { data: CampaignHistoryData }) {
     : data.isCampaignEnded && !data.isWinner 
       ? <Clock className="w-3 h-3" />
       : <CheckCircle className="w-3 h-3" />
->>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
 
   return (
     <Link
@@ -126,9 +120,6 @@ function ProcessedCampaignItem({ data }: { data: CampaignHistoryData }) {
 
 export default function Profile() {
   const { address: paramAddress } = useParams<{ address: string }>()
-<<<<<<< HEAD
-  const { address: connectedAddress, isConnected } = useAccount()
-=======
   const { address: connectedAddress } = useAccount()
   const publicClient = usePublicClient()
   
@@ -141,7 +132,6 @@ export default function Profile() {
   
   const itemsPerPage = 5
   const hasFetchedRef = useRef(false)
->>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
 
   const profileAddress = paramAddress ?? connectedAddress
   const isOwnProfile = profileAddress?.toLowerCase() === connectedAddress?.toLowerCase()
@@ -154,23 +144,6 @@ export default function Profile() {
     query: { enabled: !!FACTORY_ADDRESS },
   })
 
-<<<<<<< HEAD
-  // ✅ Tampilkan pesan jika wallet belum terhubung
-  if (!isConnected) {
-    return (
-      <div className="min-h-screen pt-24 flex items-center justify-center">
-        <div className="text-center">
-          <div className="flex justify-center mb-4">
-            <img src="/duck-icon.svg" alt="Duck" className="w-16 h-16" />
-          </div>
-          <h2 className="text-2xl font-bold mb-2">Connect Your Wallet</h2>
-          <p className="text-gray-400">Please connect your wallet to view your whitelist history</p>
-        </div>
-      </div>
-    )
-  }
-
-=======
   const campaignsList = (allCampaigns as string[]) ?? []
 
   // Fetch data untuk semua campaign dengan caching
@@ -354,7 +327,6 @@ export default function Profile() {
     setCurrentPage(1)
   }, [filter])
 
->>>>>>> 8ff0023d (optimize: add caching, filters, and analytics page)
   if (!profileAddress || !isAddress(profileAddress)) {
     return (
       <div className="min-h-screen pt-24 text-center text-text-secondary">
