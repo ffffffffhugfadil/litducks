@@ -1,8 +1,8 @@
-// src/pages/Dashboard.tsx - WITH WORKING FILTERS
+// src/pages/Dashboard.tsx - FIXED (tidak reload terus)
 
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { Link } from 'react-router-dom'
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { FACTORY_ADDRESS, FACTORY_ABI } from '../config/contracts'  
 import { CAMPAIGN_ABI } from '../config/contracts'  
 import { Download, Trophy, Users, Calendar, ExternalLink, Loader2, PlusCircle, ChevronLeft, ChevronRight, CheckCircle, Filter, Clock } from 'lucide-react'
@@ -45,15 +45,18 @@ interface CampaignSummary {
   isCompleted: boolean
 }
 
-// Cache untuk campaign data
-const campaignStatusCache = new Map<string, {
+// Cache untuk campaign data (persistent)
+let globalCache = new Map<string, {
   isActive: boolean
   isRaffleMode: boolean
   isCompleted: boolean
   timestamp: number
 }>()
 
-const CACHE_EXPIRY = 2 * 60 * 1000 // 2 menit
+let isFetchingInProgress = false
+let fetchPromise: Promise<void> | null = null
+
+const CACHE_EXPIRY = 5 * 60 * 1000 // 5 menit
 
 function CampaignRow({ address, userAddress }: { address: string; userAddress: string }) {
   const [expanded, setExpanded] = useState(false)
@@ -204,17 +207,11 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
 
   if (!isOwner) return null
 
-  // Determine campaign status for filtering
-  const isCampaignLive = active && !isPastDeadline && (!isRaffleMode || (isRaffleMode && !isRaffleCompleted))
-  const isCampaignEnded = !isCampaignLive
-  const isRaffleType = isRaffleMode
-  const isFCFSType = !isRaffleMode
-
   return (
     <div 
       className="bg-surface border border-border rounded-xl overflow-hidden"
-      data-status={isCampaignLive ? 'live' : 'ended'}
-      data-type={isRaffleType ? 'raffle' : 'fcfs'}
+      data-status={active && !isPastDeadline ? 'live' : 'ended'}
+      data-type={isRaffleMode ? 'raffle' : 'fcfs'}
     >
       <div
         className="p-4 flex items-center justify-between cursor-pointer hover:bg-surface-2 transition-colors"
@@ -428,6 +425,7 @@ export default function Dashboard() {
   const [filter, setFilter] = useState<'all' | 'live' | 'ended' | 'raffle' | 'fcfs'>('all')
   const [campaignsStatus, setCampaignsStatus] = useState<Map<string, CampaignSummary>>(new Map())
   const [isLoadingStatus, setIsLoadingStatus] = useState(true)
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
   const itemsPerPage = 6
 
   const { data: creatorCampaigns, isLoading, error, refetch } = useReadContract({
@@ -440,30 +438,45 @@ export default function Dashboard() {
 
   const campaigns = (creatorCampaigns as string[]) ?? []
 
-  // Fetch status untuk semua campaign
+  // Fetch status untuk semua campaign (hanya sekali, pakai cache global)
   const fetchAllCampaignsStatus = useCallback(async () => {
     if (!publicClient || campaigns.length === 0) return
+    if (isFetchingInProgress) return
     
     setIsLoadingStatus(true)
-    const statusMap = new Map<string, CampaignSummary>()
     
     try {
-      for (const campaignAddr of campaigns) {
-        // Check cache dulu
-        const cached = campaignStatusCache.get(campaignAddr)
-        const now = Date.now()
-        
-        if (cached && (now - cached.timestamp) < CACHE_EXPIRY) {
-          statusMap.set(campaignAddr, {
-            address: campaignAddr,
-            isActive: cached.isActive,
-            isRaffleMode: cached.isRaffleMode,
-            isCompleted: cached.isCompleted,
-          })
-          continue
+      isFetchingInProgress = true
+      
+      // Filter campaign yang perlu di-fetch (belum ada cache atau expired)
+      const now = Date.now()
+      const campaignsToFetch = campaigns.filter(addr => {
+        const cached = globalCache.get(addr)
+        return !cached || (now - cached.timestamp) >= CACHE_EXPIRY
+      })
+      
+      // Jika semua sudah di cache, langsung pakai cache
+      if (campaignsToFetch.length === 0) {
+        const statusMap = new Map<string, CampaignSummary>()
+        for (const addr of campaigns) {
+          const cached = globalCache.get(addr)
+          if (cached) {
+            statusMap.set(addr, {
+              address: addr,
+              isActive: cached.isActive,
+              isRaffleMode: cached.isRaffleMode,
+              isCompleted: cached.isCompleted,
+            })
+          }
         }
-        
-        // Fetch data dari contract
+        setCampaignsStatus(statusMap)
+        setIsLoadingStatus(false)
+        setHasLoadedOnce(true)
+        return
+      }
+      
+      // Fetch hanya campaign yang perlu
+      for (const campaignAddr of campaignsToFetch) {
         try {
           const contract = { address: campaignAddr as `0x${string}`, abi: CAMPAIGN_ABI }
           
@@ -490,20 +503,11 @@ export default function Dashboard() {
             isCompleted = !isActive || isPastDeadline || isFull
           }
           
-          const summary: CampaignSummary = {
-            address: campaignAddr,
+          // Simpan ke global cache
+          globalCache.set(campaignAddr, {
             isActive: isActive as boolean,
             isRaffleMode,
             isCompleted,
-          }
-          
-          statusMap.set(campaignAddr, summary)
-          
-          // Simpan ke cache
-          campaignStatusCache.set(campaignAddr, {
-            isActive: summary.isActive,
-            isRaffleMode: summary.isRaffleMode,
-            isCompleted: summary.isCompleted,
             timestamp: now,
           })
           
@@ -512,23 +516,47 @@ export default function Dashboard() {
         }
       }
       
+      // Build status map dari semua cache
+      const statusMap = new Map<string, CampaignSummary>()
+      for (const addr of campaigns) {
+        const cached = globalCache.get(addr)
+        if (cached) {
+          statusMap.set(addr, {
+            address: addr,
+            isActive: cached.isActive,
+            isRaffleMode: cached.isRaffleMode,
+            isCompleted: cached.isCompleted,
+          })
+        }
+      }
+      
       setCampaignsStatus(statusMap)
+      setHasLoadedOnce(true)
+      
     } catch (err) {
       console.error('Error fetching campaigns status:', err)
     } finally {
       setIsLoadingStatus(false)
+      isFetchingInProgress = false
+      fetchPromise = null
     }
   }, [publicClient, campaigns])
 
+  // Load status hanya sekali saat campaigns berubah
   useEffect(() => {
-    if (campaigns.length > 0) {
+    if (campaigns.length > 0 && !hasLoadedOnce) {
       fetchAllCampaignsStatus()
     }
-  }, [campaigns, fetchAllCampaignsStatus])
+  }, [campaigns, fetchAllCampaignsStatus, hasLoadedOnce])
 
-  // Filter campaigns berdasarkan status
+  // Filter campaigns berdasarkan status (tanpa loading ulang)
   const filteredCampaigns = useMemo(() => {
     let filtered = [...campaigns]
+    
+    // Jika belum loading status, tampilkan semua dulu
+    if (campaignsStatus.size === 0 && campaigns.length > 0 && isLoadingStatus) {
+      return []
+    }
     
     switch (filter) {
       case 'live':
@@ -559,8 +587,8 @@ export default function Dashboard() {
         filtered = campaigns
     }
     
-    return filtered.reverse()
-  }, [campaigns, campaignsStatus, filter])
+    return [...filtered].reverse()
+  }, [campaigns, campaignsStatus, filter, isLoadingStatus])
 
   // Pagination
   const totalPages = Math.ceil(filteredCampaigns.length / itemsPerPage)
@@ -570,12 +598,13 @@ export default function Dashboard() {
     return filteredCampaigns.slice(start, end)
   }, [filteredCampaigns, currentPage])
 
-  // Reset page saat filter atau data berubah
-  useEffect(() => {
+  // Reset page saat filter berubah
+  const handleFilterChange = (newFilter: typeof filter) => {
+    setFilter(newFilter)
     setCurrentPage(1)
-  }, [filter, creatorCampaigns])
+  }
 
-  // Hitung count untuk setiap filter
+  // Hitung count untuk setiap filter (pakai data yang sudah ada)
   const filterCounts = useMemo(() => {
     const counts = {
       all: campaigns.length,
@@ -619,7 +648,14 @@ export default function Dashboard() {
     )
   }
 
-  const isLoadingState = isLoading || isLoadingStatus
+  // Loading state hanya pertama kali
+  if (isLoading || (campaigns.length > 0 && campaignsStatus.size === 0 && isLoadingStatus && !hasLoadedOnce)) {
+    return (
+      <div className="min-h-screen pt-24 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen pt-24 pb-12">
@@ -651,10 +687,7 @@ export default function Dashboard() {
             {filterButtons.map((btn) => (
               <button
                 key={btn.key}
-                onClick={() => {
-                  setFilter(btn.key as typeof filter)
-                  setCurrentPage(1)
-                }}
+                onClick={() => handleFilterChange(btn.key as typeof filter)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all duration-200 ${
                   filter === btn.key
                     ? 'bg-primary text-white shadow-lg shadow-primary/20'
@@ -676,11 +709,7 @@ export default function Dashboard() {
         </div>
 
         <NetworkGuard>
-          {isLoadingState ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-primary animate-spin" />
-            </div>
-          ) : error ? (
+          {error ? (
             <div className="text-center py-12 bg-error/10 rounded-xl">
               <p className="text-error text-sm">Error loading campaigns: {error.message}</p>
               <button 
