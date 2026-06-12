@@ -1,4 +1,4 @@
-// src/pages/Dashboard.tsx - WITH SKELETON LOADING
+// src/pages/Dashboard.tsx - WITH FIX FOR RAFFLE ENDED STATE
 
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { Link } from 'react-router-dom'
@@ -200,6 +200,9 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
   // Tampilkan winners list (Raffle winners atau FCFS registrants)
   const displayWinners = isRaffleMode ? winnersList : fcfsWinnersList
 
+  // Cek apakah raffle sudah ended (lewat deadline) tapi belum di-run
+  const isRaffleEndedNotRun = isRaffleMode && !isRaffleCompleted && isPastDeadline && hasRegistrants
+
   const handleRunRaffle = () => {
     const emptyMerkle = "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`
     writeContract({ 
@@ -223,13 +226,16 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
   }
 
   const exportWinnersCSV = () => {
-    if (!displayWinners || displayWinners.length === 0) return
-    const csv = ['address,winner_number', ...displayWinners.map((addr, i) => `${addr},${i + 1}`)].join('\n')
+    // For raffle ended but not run, show registrants as eligible
+    const dataToExport = isRaffleEndedNotRun && registrantAddresses 
+      ? registrantAddresses 
+      : displayWinners
+    if (!dataToExport || dataToExport.length === 0) return
+    const csv = ['address,winner_number', ...dataToExport.map((addr, i) => `${addr},${i + 1}`)].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
-    a.download = `${(name as string)?.replace(/\s+/g, '_') || 'campaign'}_winners.csv`
+    a.download = `${(name as string)?.replace(/\s+/g, '_') || 'campaign'}_${isRaffleEndedNotRun ? 'eligible' : 'winners'}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -275,13 +281,22 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
                 <CheckCircle className="w-3 h-3" /> Raffle Complete
               </span>
             )}
+            {isRaffleEndedNotRun && (
+              <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 flex items-center gap-1">
+                <Clock className="w-3 h-3" /> Awaiting Draw
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-4 text-xs text-text-secondary">
             <span className="flex items-center gap-1">
               <Users className="w-3 h-3" /> {registered}/{totalSlotsNum}
             </span>
             <span className="flex items-center gap-1">
-              <Trophy className="w-3 h-3" /> {isRaffleMode ? winners : (isFCFSCompleted ? registered : 0)} winners
+              <Trophy className="w-3 h-3" /> 
+              {isRaffleMode 
+                ? (isRaffleCompleted ? winners : (isPastDeadline ? `${registered} eligible` : `${winners} winners`))
+                : (isFCFSCompleted ? registered : 0)} 
+              {isRaffleMode && !isRaffleCompleted && isPastDeadline && ' eligible'}
             </span>
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
@@ -308,35 +323,35 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
             </p>
           </div>
           
-          {/* Run Raffle Button */}
-          {isRaffleMode && !isRaffleCompleted && isActive && isOwner && (
+          {/* Run Raffle Button - Enhanced for ended state */}
+          {isRaffleMode && !isRaffleCompleted && isOwner && (
             <div className="mb-3">
-              {!isPastDeadline ? (
-                <div className="p-2 bg-warning/10 border border-warning/20 rounded-lg text-center">
-                  <p className="text-xs text-warning">Raffle available after deadline ({deadlineDate?.toLocaleDateString()})</p>
-                </div>
-              ) : !hasRegistrants ? (
+              {isPastDeadline && hasRegistrants ? (
+                <button
+                  onClick={handleRunRaffle}
+                  disabled={isPending || isConfirming}
+                  className="w-full py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg"
+                >
+                  {isPending || isConfirming ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Drawing Winners...</>
+                  ) : (
+                    <> Draw Raffle Winners Now! ({registrantAddresses?.length || 0} eligible)</>
+                  )}
+                </button>
+              ) : isPastDeadline && !hasRegistrants ? (
                 <div className="p-2 bg-warning/10 border border-warning/20 rounded-lg text-center">
                   <p className="text-xs text-warning">No registrants to run raffle</p>
                 </div>
               ) : (
-                <button
-                  onClick={handleRunRaffle}
-                  disabled={isPending || isConfirming || !hasRegistrants}
-                  className="w-full py-2 bg-purple-500/20 border border-purple-500/30 text-purple-400 rounded-lg text-sm font-medium hover:bg-purple-500/30 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {isPending || isConfirming ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Running Raffle...</>
-                  ) : (
-                    <>🎲 Run Raffle</>
-                  )}
-                </button>
+                <div className="p-2 bg-warning/10 border border-warning/20 rounded-lg text-center">
+                  <p className="text-xs text-warning">Raffle available after deadline ({deadlineDate?.toLocaleDateString()})</p>
+                </div>
               )}
               {writeError && (
                 <p className="text-xs text-error mt-1">{writeError.message.slice(0, 100)}</p>
               )}
               {isConfirmed && (
-                <p className="text-xs text-success mt-1">✅ Raffle completed! Winners selected.</p>
+                <p className="text-xs text-success mt-1"> Raffle completed! Winners selected.</p>
               )}
             </div>
           )}
@@ -345,7 +360,7 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
           {!isRaffleMode && isFCFSCompleted && (
             <div className="mb-3 p-2 bg-green-500/10 border border-green-500/20 rounded-lg text-center">
               <p className="text-xs text-green-400">
-                ✅ Campaign completed! {registered} registrants are winners.
+                 Campaign completed! {registered} registrants are winners.
                 {registered >= totalSlotsNum 
                   ? ` All ${totalSlotsNum} slots filled.` 
                   : ` Deadline has passed.`}
@@ -365,6 +380,16 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
             </div>
           )}
           
+          {/* Raffle Ended - Awaiting Draw Info */}
+          {isRaffleEndedNotRun && (
+            <div className="mb-3 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-center">
+              <p className="text-xs text-yellow-400 flex items-center justify-center gap-2">
+                <Clock className="w-3 h-3" />
+                Raffle period has ended! Click "Draw Raffle Winners" above to select winners from {registrantAddresses?.length} registrants.
+              </p>
+            </div>
+          )}
+          
           {/* Tombol Export */}
           <div className="flex gap-2 flex-wrap">
             {registrantAddresses && registrantAddresses.length > 0 && (
@@ -376,16 +401,22 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
               </button>
             )}
             
-            {displayWinners.length > 0 && (
+            {/* Export Winners/Eligible button */}
+            {(displayWinners.length > 0 || isRaffleEndedNotRun) && (
               <button
                 onClick={exportWinnersCSV}
                 className={`px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-1 ${
-                  isRaffleMode 
-                    ? 'bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30'
-                    : 'bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500/30'
+                  isRaffleEndedNotRun
+                    ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/30'
+                    : isRaffleMode 
+                      ? 'bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30'
+                      : 'bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500/30'
                 }`}
               >
-                <Download className="w-3 h-3" /> Export Winners ({displayWinners.length})
+                <Download className="w-3 h-3" /> 
+                {isRaffleEndedNotRun 
+                  ? `Export Eligible (${registrantAddresses?.length || 0})` 
+                  : `Export Winners (${displayWinners.length})`}
               </button>
             )}
           </div>
@@ -406,6 +437,11 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
                         <Trophy className="w-3 h-3" /> Winner
                       </span>
                     )}
+                    {isRaffleEndedNotRun && (
+                      <span className="text-xs text-yellow-400 flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> Eligible
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -414,23 +450,44 @@ function CampaignRow({ address, userAddress }: { address: string; userAddress: s
             <p className="text-xs text-text-secondary text-center py-2">No registrants yet</p>
           )}
 
-          {/* Daftar Winners */}
-          {displayWinners.length > 0 && !(isRaffleMode && !isRaffleCompleted) && (
+          {/* Daftar Winners - Show eligible registrants if raffle ended but not run */}
+          {(displayWinners.length > 0 || isRaffleEndedNotRun) && (
             <div>
               <p className="text-xs font-medium text-text mb-2 flex items-center gap-2">
-                <Trophy className="w-3 h-3 text-yellow-400" />
-                Winners ({displayWinners.length})
+                <Trophy className={`w-3 h-3 ${isRaffleEndedNotRun ? 'text-yellow-400' : 'text-green-400'}`} />
+                {isRaffleEndedNotRun ? (
+                  <>Pending Winners - Eligible for Draw ({registrantAddresses?.length || 0})</>
+                ) : (
+                  <>Winners ({displayWinners.length})</>
+                )}
               </p>
               <div className="space-y-1 max-h-48 overflow-y-auto">
-                {displayWinners.map((addr, i) => (
-                  <div key={addr} className="flex items-center justify-between px-3 py-1.5 bg-green-500/10 rounded-lg border border-green-500/20">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-text-secondary">{i + 1}.</span>
-                      <span className="font-mono text-xs text-text">{shortAddr(addr)}</span>
+                {isRaffleEndedNotRun && registrantAddresses ? (
+                  // Show registrants as eligible for raffle (before drawing)
+                  registrantAddresses.map((addr, i) => (
+                    <div key={addr} className="flex items-center justify-between px-3 py-1.5 bg-yellow-500/10 rounded-lg border border-yellow-500/20">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-text-secondary">{i + 1}.</span>
+                        <span className="font-mono text-xs text-text">{shortAddr(addr)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-yellow-400" />
+                        <span className="text-xs text-yellow-400">Awaiting Draw</span>
+                      </div>
                     </div>
-                    <Trophy className="w-3 h-3 text-green-400" />
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  // Show actual winners
+                  displayWinners.map((addr, i) => (
+                    <div key={addr} className="flex items-center justify-between px-3 py-1.5 bg-green-500/10 rounded-lg border border-green-500/20">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-text-secondary">{i + 1}.</span>
+                        <span className="font-mono text-xs text-text">{shortAddr(addr)}</span>
+                      </div>
+                      <Trophy className="w-3 h-3 text-green-400" />
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
