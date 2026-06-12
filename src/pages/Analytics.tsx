@@ -1,17 +1,17 @@
-// src/pages/Analytics.tsx - FULLY CORRECTED
-
+// src/pages/Analytics.tsx - WITH SKELETON LOADING
 import { useAccount } from 'wagmi'
+import { useReadContract, usePublicClient } from 'wagmi'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { FACTORY_ADDRESS, FACTORY_ABI, CAMPAIGN_ABI } from '../config/contracts'
 import { Link } from 'react-router-dom'
-import { useState, useEffect, useMemo } from 'react'
 import { 
   TrendingUp, Users, Trophy, Calendar, 
   ArrowUp, ArrowDown, Loader2,
   BarChart3, LineChart as LineChartIcon, PieChart,
-  ChevronLeft, ChevronRight, CheckCircle, RefreshCw, Database
+  ChevronLeft, ChevronRight, CheckCircle, RefreshCw
 } from 'lucide-react'
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from 'recharts'
 
-// Interface definitions
 interface CampaignStat {
   address: string
   name: string
@@ -24,17 +24,17 @@ interface CampaignStat {
   isRaffle: boolean
 }
 
+interface CampaignWithActualWinners extends CampaignStat {
+  actualWinnerCount: number
+  isCompleted: boolean
+  conversionRate: number
+}
+
 interface RegistrationEvent {
   campaignAddress: string
   registrantAddress: string
   registeredAt: number
   isWinner: boolean
-}
-
-interface CampaignWithActualWinners extends CampaignStat {
-  actualWinnerCount: number
-  isCompleted: boolean
-  conversionRate: number
 }
 
 // SVG Icons
@@ -74,7 +74,7 @@ function shortAddr(addr: string) {
 
 // Skeleton Components
 const StatsCardSkeleton = () => (
-  <div className="bg-surface border border-border rounded-xl p-4 animate-pulse">
+  <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 animate-pulse">
     <div className="flex items-center justify-between mb-2">
       <div className="h-4 w-24 bg-gray-700 rounded"></div>
       <div className="h-4 w-4 bg-gray-700 rounded"></div>
@@ -85,7 +85,7 @@ const StatsCardSkeleton = () => (
 )
 
 const ChartSkeleton = () => (
-  <div className="bg-surface border border-border rounded-xl p-4 animate-pulse">
+  <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 animate-pulse">
     <div className="flex items-center gap-2 mb-4">
       <div className="h-4 w-4 bg-gray-700 rounded"></div>
       <div className="h-5 w-40 bg-gray-700 rounded"></div>
@@ -97,7 +97,7 @@ const ChartSkeleton = () => (
 )
 
 const TableRowSkeleton = () => (
-  <tr className="border-b border-border">
+  <tr className="border-b border-gray-700">
     <td className="py-3 px-4">
       <div className="h-5 w-32 bg-gray-700 rounded animate-pulse"></div>
       <div className="h-3 w-24 bg-gray-700 rounded mt-1 animate-pulse"></div>
@@ -126,52 +126,55 @@ const TableRowSkeleton = () => (
   </tr>
 )
 
+// Cache keys
+const CACHE_KEY_CAMPAIGNS = 'analytics_campaigns_data'
+const CACHE_KEY_REGISTRATIONS = 'analytics_registrations_data'
+const CACHE_KEY_TIMESTAMP = 'analytics_cache_timestamp'
+
 type SortField = 'registrants' | 'winners' | 'conversion'
 type SortOrder = 'desc' | 'asc'
 type ModeFilter = 'all' | 'fcfs' | 'raffle'
 
-// Storage keys
-const STORAGE_KEYS = {
-  CAMPAIGNS: 'analytics_campaigns_data',
-  REGISTRATIONS: 'analytics_registrations_data',
-  TIMESTAMP: 'analytics_cache_timestamp',
-}
-
 export default function Analytics() {
   const { isConnected } = useAccount()
+  const publicClient = usePublicClient()
   
-  // Load from localStorage on mount
+  // Load from localStorage on initial render
   const [campaigns, setCampaigns] = useState<CampaignStat[]>(() => {
-    try {
-      const cached = localStorage.getItem(STORAGE_KEYS.CAMPAIGNS)
-      return cached ? JSON.parse(cached) : []
-    } catch {
-      return []
+    const cached = localStorage.getItem(CACHE_KEY_CAMPAIGNS)
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached)
+        return parsed
+      } catch (e) {
+        return []
+      }
     }
+    return []
   })
   
   const [registrations, setRegistrations] = useState<RegistrationEvent[]>(() => {
-    try {
-      const cached = localStorage.getItem(STORAGE_KEYS.REGISTRATIONS)
-      return cached ? JSON.parse(cached) : []
-    } catch {
-      return []
+    const cached = localStorage.getItem(CACHE_KEY_REGISTRATIONS)
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached)
+        return parsed
+      } catch (e) {
+        return []
+      }
     }
+    return []
   })
   
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(() => {
-    try {
-      const timestamp = localStorage.getItem(STORAGE_KEYS.TIMESTAMP)
-      return timestamp ? new Date(parseInt(timestamp)) : null
-    } catch {
-      return null
-    }
-  })
-  
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [topCampaignsType, setTopCampaignsType] = useState<'registrants' | 'winners'>('registrants')
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(() => {
+    const timestamp = localStorage.getItem(CACHE_KEY_TIMESTAMP)
+    return timestamp ? new Date(parseInt(timestamp)) : null
+  })
   
   // Sorting states
   const [sortField, setSortField] = useState<SortField>('registrants')
@@ -180,15 +183,23 @@ export default function Analytics() {
   
   const itemsPerPage = 10
 
-  // Helper functions
-  const isFCFSCompleted = (campaign: CampaignStat) => {
+  const { data: allCampaigns, refetch: refetchAllCampaigns, isLoading: loadingCampaigns } = useReadContract({
+    address: FACTORY_ADDRESS as `0x${string}`,
+    abi: FACTORY_ABI,
+    functionName: 'getAllCampaigns',
+    query: { enabled: !!FACTORY_ADDRESS },
+  })
+
+  const campaignsList = (allCampaigns as string[]) ?? []
+
+  const isFCFSCompleted = useCallback((campaign: CampaignStat) => {
     if (campaign.isRaffle) return false
     const isFull = campaign.registrantCount >= campaign.totalSlots
     const isPastDeadline = campaign.deadline > 0 && Date.now() / 1000 > campaign.deadline
     return !campaign.isActive || isFull || isPastDeadline
-  }
+  }, [])
 
-  const getActualWinnerCount = (campaign: CampaignStat) => {
+  const getActualWinnerCount = useCallback((campaign: CampaignStat) => {
     if (campaign.isRaffle) {
       return campaign.winnerCount
     } else {
@@ -197,9 +208,148 @@ export default function Analytics() {
       }
       return 0
     }
+  }, [isFCFSCompleted])
+
+  const saveToCache = useCallback((campaignsData: CampaignStat[], registrationsData: RegistrationEvent[]) => {
+    localStorage.setItem(CACHE_KEY_CAMPAIGNS, JSON.stringify(campaignsData))
+    localStorage.setItem(CACHE_KEY_REGISTRATIONS, JSON.stringify(registrationsData))
+    localStorage.setItem(CACHE_KEY_TIMESTAMP, Date.now().toString())
+    setLastUpdated(new Date())
+  }, [])
+
+  const fetchAllRegistrations = useCallback(async (campaignAddresses: string[]) => {
+    if (!publicClient || campaignAddresses.length === 0) return []
+    
+    const allRegistrations: RegistrationEvent[] = []
+    
+    for (const campaignAddr of campaignAddresses) {
+      try {
+        const registrants = await publicClient.readContract({
+          address: campaignAddr as `0x${string}`,
+          abi: CAMPAIGN_ABI,
+          functionName: 'getRegistrants',
+        }) as string[]
+        
+        if (registrants && registrants.length > 0) {
+          for (const registrant of registrants) {
+            try {
+              const registeredAt = await publicClient.readContract({
+                address: campaignAddr as `0x${string}`,
+                abi: CAMPAIGN_ABI,
+                functionName: 'registeredAt',
+                args: [registrant as `0x${string}`],
+              }) as bigint
+              
+              const isWinner = await publicClient.readContract({
+                address: campaignAddr as `0x${string}`,
+                abi: CAMPAIGN_ABI,
+                functionName: 'isWinner',
+                args: [registrant as `0x${string}`],
+              }) as boolean
+              
+              allRegistrations.push({
+                campaignAddress: campaignAddr,
+                registrantAddress: registrant,
+                registeredAt: Number(registeredAt),
+                isWinner,
+              })
+            } catch (err) {
+              console.error(`Error fetching registration details:`, err)
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`Error fetching registrants for ${campaignAddr}:`, err)
+      }
+    }
+    
+    return allRegistrations
+  }, [publicClient])
+
+  const fetchData = useCallback(async () => {
+    if (!publicClient || campaignsList.length === 0) return
+    
+    setIsLoading(true)
+    setError(null)
+    setLoadingProgress(0)
+    
+    try {
+      const loadedCampaigns: CampaignStat[] = []
+      const batchSize = 10
+      const total = campaignsList.length
+      
+      for (let i = 0; i < total; i += batchSize) {
+        const batch = campaignsList.slice(i, i + batchSize)
+        
+        const completed = Math.min(i + batchSize, total)
+        setLoadingProgress(Math.floor((completed / total) * 50))
+        
+        const batchPromises = batch.map(async (address) => {
+          try {
+            const contract = { address: address as `0x${string}`, abi: CAMPAIGN_ABI }
+            
+            const [name, totalSlots, deadline, createdAt, registrantCount, winnerCount, isActive, selectionMode] = await Promise.all([
+              publicClient.readContract({ ...contract, functionName: 'name' }),
+              publicClient.readContract({ ...contract, functionName: 'totalSlots' }),
+              publicClient.readContract({ ...contract, functionName: 'deadline' }),
+              publicClient.readContract({ ...contract, functionName: 'createdAt' }),
+              publicClient.readContract({ ...contract, functionName: 'registrantCount' }),
+              publicClient.readContract({ ...contract, functionName: 'winnerCount' }),
+              publicClient.readContract({ ...contract, functionName: 'isActive' }),
+              publicClient.readContract({ ...contract, functionName: 'selectionMode' }),
+            ])
+            
+            return {
+              address,
+              name: (name as string) || 'Untitled',
+              totalSlots: Number(totalSlots ?? 0),
+              deadline: Number(deadline ?? 0),
+              createdAt: Number(createdAt ?? 0),
+              registrantCount: Number(registrantCount ?? 0),
+              winnerCount: Number(winnerCount ?? 0),
+              isActive: isActive as boolean || false,
+              isRaffle: (selectionMode as number) === 1,
+            } as CampaignStat
+          } catch (error) {
+            console.error(`Error fetching ${address}:`, error)
+            return null
+          }
+        })
+        
+        const batchResults = await Promise.all(batchPromises)
+        loadedCampaigns.push(...batchResults.filter(c => c !== null))
+      }
+      
+      setLoadingProgress(60)
+      const registrationsData = await fetchAllRegistrations(campaignsList)
+      setLoadingProgress(90)
+      
+      setCampaigns(loadedCampaigns)
+      setRegistrations(registrationsData)
+      saveToCache(loadedCampaigns, registrationsData)
+      
+      setLoadingProgress(100)
+      await new Promise(resolve => setTimeout(resolve, 200))
+      
+    } catch (err) {
+      console.error('Fetch error:', err)
+      setError('Failed to load data')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [publicClient, campaignsList, fetchAllRegistrations, saveToCache])
+
+  useEffect(() => {
+    if (campaignsList.length > 0 && campaigns.length === 0 && !isLoading) {
+      fetchData()
+    }
+  }, [campaignsList, campaigns.length, isLoading, fetchData])
+
+  const handleRefresh = async () => {
+    await refetchAllCampaigns()
+    await fetchData()
   }
 
-  // Process campaigns with computed fields
   const processedCampaigns = useMemo((): CampaignWithActualWinners[] => {
     return campaigns.map(campaign => {
       const actualWinnerCount = getActualWinnerCount(campaign)
@@ -215,16 +365,14 @@ export default function Analytics() {
         conversionRate,
       }
     })
-  }, [campaigns])
+  }, [campaigns, getActualWinnerCount, isFCFSCompleted])
 
-  // Filter by mode
   const filteredByMode = useMemo(() => {
     if (modeFilter === 'all') return processedCampaigns
     if (modeFilter === 'fcfs') return processedCampaigns.filter(c => !c.isRaffle)
     return processedCampaigns.filter(c => c.isRaffle)
   }, [processedCampaigns, modeFilter])
 
-  // Sort campaigns
   const sortedAndFilteredCampaigns = useMemo(() => {
     const sorted = [...filteredByMode]
     
@@ -249,7 +397,11 @@ export default function Analytics() {
           bVal = b.registrantCount
       }
       
-      return sortOrder === 'desc' ? bVal - aVal : aVal - bVal
+      if (sortOrder === 'desc') {
+        return bVal - aVal
+      } else {
+        return aVal - bVal
+      }
     })
     
     return sorted
@@ -269,18 +421,36 @@ export default function Analytics() {
       return <ArrowUp className="w-3 h-3 opacity-30" />
     }
     return sortOrder === 'desc' 
-      ? <ArrowUp className="w-3 h-3 text-primary" />
-      : <ArrowDown className="w-3 h-3 text-primary" />
+      ? <ArrowUp className="w-3 h-3 text-blue-500" />
+      : <ArrowDown className="w-3 h-3 text-blue-500" />
   }
 
-  // Chart data from registrations
+  const campaignsWithRegistrants = useMemo(() => {
+    return processedCampaigns.filter(c => c.registrantCount > 0)
+  }, [processedCampaigns])
+  
+  const campaignsWithWinners = useMemo(() => {
+    return processedCampaigns.filter(c => c.actualWinnerCount > 0)
+  }, [processedCampaigns])
+  
+  const topCampaignsData = useMemo(() => {
+    if (topCampaignsType === 'registrants') {
+      return campaignsWithRegistrants
+        .sort((a, b) => b.registrantCount - a.registrantCount)
+        .slice(0, 5)
+    } else {
+      return campaignsWithWinners
+        .sort((a, b) => b.actualWinnerCount - a.actualWinnerCount)
+        .slice(0, 5)
+    }
+  }, [topCampaignsType, campaignsWithRegistrants, campaignsWithWinners])
+  
   const chartData = useMemo(() => {
     const registrationsByDay: Map<string, number> = new Map()
     
     const today = new Date()
     const todayStr = today.toISOString().split('T')[0]
     
-    // Initialize last 14 days
     for (let i = 13; i >= 0; i--) {
       const date = new Date(today)
       date.setDate(today.getDate() - i)
@@ -288,7 +458,6 @@ export default function Analytics() {
       registrationsByDay.set(dateStr, 0)
     }
     
-    // Count registrations per day
     registrations.forEach(reg => {
       const date = new Date(reg.registeredAt * 1000)
       const dateStr = date.toISOString().split('T')[0]
@@ -296,29 +465,30 @@ export default function Analytics() {
       registrationsByDay.set(dateStr, currentCount + 1)
     })
     
-    // Convert to array and format dates
-    return Array.from(registrationsByDay.entries())
+    let chartDataArray = Array.from(registrationsByDay.entries())
       .map(([date, count]) => ({ 
         date, 
         registrants: count 
       }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .map(item => {
-        const date = new Date(item.date)
-        const isToday = item.date === todayStr
-        return {
-          ...item,
-          date: isToday ? 'Today' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        }
-      })
+    
+    chartDataArray = chartDataArray.map(item => {
+      const date = new Date(item.date)
+      const isToday = item.date === todayStr
+      return {
+        ...item,
+        date: isToday ? 'Today' : date.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' })
+      }
+    })
+    
+    return chartDataArray
   }, [registrations])
 
-  // Statistics
   const stats = useMemo(() => {
     const totalCampaigns = processedCampaigns.length
     const totalRegistrants = processedCampaigns.reduce((sum, c) => sum + (c.registrantCount || 0), 0)
     const totalWinners = processedCampaigns.reduce((sum, c) => sum + (c.actualWinnerCount || 0), 0)
-    const activeCampaigns = processedCampaigns.filter(c => c.isActive === true && !c.isCompleted).length
+    const activeCampaigns = processedCampaigns.filter(c => c.isActive).length
     const avgRegistrants = totalCampaigns > 0 ? (totalRegistrants / totalCampaigns).toFixed(1) : '0'
     const avgWinners = totalCampaigns > 0 ? (totalWinners / totalCampaigns).toFixed(1) : '0'
     const completionRate = totalRegistrants > 0 ? ((totalWinners / totalRegistrants) * 100).toFixed(1) : '0'
@@ -338,7 +508,6 @@ export default function Analytics() {
     const fcfsConversion = fcfsRegistrants > 0 ? (fcfsWinners / fcfsRegistrants * 100).toFixed(1) : '0'
     const raffleConversion = raffleRegistrants > 0 ? (raffleWinners / raffleRegistrants * 100).toFixed(1) : '0'
     
-    // Growth calculation
     const thirtyDaysAgo = Date.now() / 1000 - 30 * 24 * 60 * 60
     const lastMonthRegistrations = registrations.filter(r => r.registeredAt > thirtyDaysAgo).length
     const previousMonthRegistrations = registrations.filter(r => r.registeredAt <= thirtyDaysAgo).length
@@ -357,6 +526,7 @@ export default function Analytics() {
       avgRegistrants,
       avgWinners,
       completionRate,
+      chartData,
       fcfsCount,
       raffleCount,
       completedCount,
@@ -367,30 +537,8 @@ export default function Analytics() {
     }
   }, [processedCampaigns, registrations])
 
-  // Top campaigns
-  const campaignsWithRegistrants = useMemo(() => {
-    return processedCampaigns.filter(c => c.registrantCount > 0)
-  }, [processedCampaigns])
-  
-  const campaignsWithWinners = useMemo(() => {
-    return processedCampaigns.filter(c => c.actualWinnerCount > 0)
-  }, [processedCampaigns])
-  
-  const topCampaignsData = useMemo(() => {
-    if (topCampaignsType === 'registrants') {
-      return [...campaignsWithRegistrants]
-        .sort((a, b) => b.registrantCount - a.registrantCount)
-        .slice(0, 5)
-    } else {
-      return [...campaignsWithWinners]
-        .sort((a, b) => b.actualWinnerCount - a.actualWinnerCount)
-        .slice(0, 5)
-    }
-  }, [topCampaignsType, campaignsWithRegistrants, campaignsWithWinners])
-
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(sortedAndFilteredCampaigns.length / itemsPerPage))
-  const safeCurrentPage = Math.min(currentPage, totalPages)
+  const totalPages = Math.ceil(sortedAndFilteredCampaigns.length / itemsPerPage)
+  const safeCurrentPage = Math.min(currentPage, totalPages || 1)
   const startIndex = (safeCurrentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
   const currentCampaigns = sortedAndFilteredCampaigns.slice(startIndex, endIndex)
@@ -399,79 +547,63 @@ export default function Analytics() {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)))
   }
 
-  // Manual refresh
-  const handleRefresh = async () => {
-    setIsRefreshing(true)
-    setError(null)
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000))
-    } catch (err) {
-      setError('Failed to refresh data')
-    } finally {
-      setIsRefreshing(false)
-    }
-  }
-
-  // Data age status
-  const getDataAgeStatus = () => {
-    if (!lastUpdated) return { label: 'No data', color: 'bg-gray-500' }
-    const age = Date.now() - lastUpdated.getTime()
-    const minutes = Math.floor(age / 60000)
-    if (minutes < 5) return { label: 'Fresh', color: 'bg-green-500' }
-    if (minutes < 15) return { label: 'Stale', color: 'bg-yellow-500' }
-    return { label: 'Old', color: 'bg-red-500' }
-  }
-
-  const dataStatus = getDataAgeStatus()
-  const isFirstLoad = campaigns.length === 0 && !isRefreshing && lastUpdated === null
+  // Show SKELETON loading - halaman tetap tampil tapi dengan animasi loading
+  const isFirstLoad = loadingCampaigns && campaigns.length === 0
 
   return (
-    <div className="min-h-screen pt-24 pb-12">
+    <div className="min-h-screen pt-24 pb-12 bg-gray-950">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        {/* Header */}
+        {/* Header - always visible */}
         <div className="mb-8 flex justify-between items-center flex-wrap gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-text mb-1">Analytics Dashboard</h1>
-            <p className="text-text-secondary text-sm">Overview of all whitelist campaigns</p>
+            <h1 className="text-3xl font-bold text-white mb-1">Analytics Dashboard</h1>
+            <p className="text-gray-400 text-sm">Overview of all whitelist campaigns on LitVM LiteForge</p>
             {lastUpdated && !isFirstLoad && (
-              <div className="flex items-center gap-2 mt-1">
-                <div className={`w-2 h-2 rounded-full ${dataStatus.color}`} />
-                <p className="text-xs text-text-secondary">
-                  Data {dataStatus.label} • Last updated: {lastUpdated.toLocaleString()}
-                </p>
-              </div>
-            )}
-            {isFirstLoad && (
-              <p className="text-xs text-text-secondary mt-1">
-                <Database className="w-3 h-3 inline mr-1" />
-                Loading data...
+              <p className="text-xs text-gray-500 mt-1">
+                Last updated: {lastUpdated.toLocaleString()}
               </p>
             )}
           </div>
           
           <button
             onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="flex items-center gap-2 px-3 py-2 bg-surface-2 hover:bg-surface border border-border rounded-lg transition-colors disabled:opacity-50"
+            disabled={isLoading || isFirstLoad}
+            className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
           >
-            {isRefreshing ? (
-              <Loader2 className="w-4 h-4 text-text-secondary animate-spin" />
+            {isLoading ? (
+              <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
             ) : (
-              <RefreshCw className="w-4 h-4 text-text-secondary" />
+              <RefreshCw className="w-4 h-4 text-gray-400" />
             )}
-            <span className="text-sm text-text-secondary">
-              {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+            <span className="text-sm text-gray-400">
+              {isLoading ? 'Loading...' : 'Refresh Data'}
             </span>
           </button>
         </div>
 
+        {/* Loading progress bar */}
+        {isLoading && loadingProgress > 0 && loadingProgress < 100 && (
+          <div className="mb-4">
+            <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+              <span>Refreshing data...</span>
+              <span>{loadingProgress}%</span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
+              <div 
+                className="bg-blue-500 h-1.5 rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${loadingProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {error && (
-          <div className="mb-4 p-3 bg-error/10 border border-error/20 rounded-lg text-error text-sm">
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-sm">
             {error}
           </div>
         )}
 
-        {/* Stats Cards */}
+        {/* Stats Cards - Show skeletons when loading first time */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           {isFirstLoad ? (
             <>
@@ -483,77 +615,79 @@ export default function Analytics() {
             </>
           ) : (
             <>
-              <div className="bg-surface border border-border rounded-xl p-4">
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-text-secondary text-sm">Total Campaigns</span>
-                  <Trophy className="w-4 h-4 text-primary" />
+                  <span className="text-gray-400 text-sm">Total Campaigns</span>
+                  <Trophy className="w-4 h-4 text-blue-500" />
                 </div>
-                <p className="text-2xl font-bold text-text">{stats.totalCampaigns}</p>
+                <p className="text-2xl font-bold text-white">{stats.totalCampaigns}</p>
                 <div className="flex items-center gap-1 mt-1">
-                  {stats.growthPercent > 0 ? <ArrowUp className="w-3 h-3 text-success" /> : stats.growthPercent < 0 ? <ArrowDown className="w-3 h-3 text-error" /> : null}
-                  <span className={`text-xs ${stats.growthPercent > 0 ? 'text-success' : stats.growthPercent < 0 ? 'text-error' : 'text-text-secondary'}`}>
+                  {stats.growthPercent > 0 ? <ArrowUp className="w-3 h-3 text-green-500" /> : stats.growthPercent < 0 ? <ArrowDown className="w-3 h-3 text-red-500" /> : null}
+                  <span className={`text-xs ${stats.growthPercent > 0 ? 'text-green-500' : stats.growthPercent < 0 ? 'text-red-500' : 'text-gray-500'}`}>
                     {stats.growthPercent > 0 ? '+' : ''}{stats.growthPercent.toFixed(1)}% last 30 days
                   </span>
                 </div>
               </div>
               
-              <div className="bg-surface border border-border rounded-xl p-4">
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-text-secondary text-sm">Total Registrants</span>
-                  <Users className="w-4 h-4 text-primary" />
+                  <span className="text-gray-400 text-sm">Total Registrants</span>
+                  <Users className="w-4 h-4 text-blue-500" />
                 </div>
-                <p className="text-2xl font-bold text-text">{stats.totalRegistrants.toLocaleString()}</p>
-                <p className="text-xs text-text-secondary mt-1">Avg {stats.avgRegistrants} per campaign</p>
+                <p className="text-2xl font-bold text-white">{stats.totalRegistrants}</p>
+                <p className="text-xs text-gray-400 mt-1">Avg {stats.avgRegistrants} per campaign</p>
               </div>
               
-              <div className="bg-surface border border-border rounded-xl p-4">
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-text-secondary text-sm">Total Winners</span>
-                  <TrendingUp className="w-4 h-4 text-warning" />
+                  <span className="text-gray-400 text-sm">Total Winners</span>
+                  <TrendingUp className="w-4 h-4 text-yellow-500" />
                 </div>
-                <p className="text-2xl font-bold text-warning">{stats.totalWinners.toLocaleString()}</p>
-                <p className="text-xs text-text-secondary mt-1">Avg {stats.avgWinners} per campaign</p>
+                <p className="text-2xl font-bold text-yellow-400">{stats.totalWinners}</p>
+                <p className="text-xs text-gray-400 mt-1">Avg {stats.avgWinners} per campaign</p>
               </div>
               
-              <div className="bg-surface border border-border rounded-xl p-4">
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-text-secondary text-sm">Active Campaigns</span>
-                  <Calendar className="w-4 h-4 text-primary" />
+                  <span className="text-gray-400 text-sm">Active Campaigns</span>
+                  <Calendar className="w-4 h-4 text-blue-500" />
                 </div>
-                <p className="text-2xl font-bold text-text">{stats.activeCampaigns}</p>
-                <p className="text-xs text-text-secondary mt-1">{stats.completedCount} completed</p>
+                <p className="text-2xl font-bold text-white">{stats.activeCampaigns}</p>
+                <p className="text-xs text-gray-400 mt-1">{stats.completedCount} completed</p>
               </div>
 
-              <div className="bg-surface border border-border rounded-xl p-4">
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-text-secondary text-sm">Win Rate</span>
-                  <CheckCircle className="w-4 h-4 text-success" />
+                  <span className="text-gray-400 text-sm">Win Rate</span>
+                  <CheckCircle className="w-4 h-4 text-green-500" />
                 </div>
-                <p className="text-2xl font-bold text-success">{stats.completionRate}%</p>
-                <p className="text-xs text-text-secondary mt-1">Registrants → Winners</p>
+                <p className="text-2xl font-bold text-green-400">{stats.completionRate}%</p>
+                <p className="text-xs text-gray-400 mt-1">Registrants → Winners</p>
               </div>
             </>
           )}
         </div>
 
-        {/* Charts */}
+        {/* Charts - Show skeletons when loading first time */}
         {isFirstLoad ? (
           <>
             <ChartSkeleton />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <ChartSkeleton />
               <ChartSkeleton />
             </div>
+            <ChartSkeleton />
           </>
         ) : (
           <>
-            {/* Registrations Over Time */}
-            <div className="bg-surface border border-border rounded-xl p-4 mb-6">
+            {/* Chart - Based on actual registration time */}
+            <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 mb-6">
               <div className="flex items-center gap-2 mb-4">
-                <LineChartIcon className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-text">Registrations Over Time (Last 14 Days)</h3>
+                <LineChartIcon className="w-4 h-4 text-blue-500" />
+                <h3 className="font-semibold text-white">Registrations Over Time</h3>
+                <span className="text-xs text-gray-500 ml-2">(Based on actual registration time)</span>
               </div>
-              {chartData.length > 0 && registrations.length > 0 ? (
+              {chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <AreaChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -581,21 +715,24 @@ export default function Analytics() {
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-[300px] flex items-center justify-center text-text-secondary">
+                <div className="h-[300px] flex items-center justify-center text-gray-400">
                   <div className="text-center">
                     <p>No registration data available</p>
                     <p className="text-xs mt-2">Registrations will appear here after users join campaigns</p>
                   </div>
                 </div>
               )}
+              <p className="text-xs text-gray-500 text-center mt-2">
+                Total registrations tracked: {registrations.length}
+              </p>
             </div>
 
             {/* Campaign Type & Conversion Rate */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div className="bg-surface border border-border rounded-xl p-4">
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-4">
-                  <BarChart3 className="w-4 h-4 text-primary" />
-                  <h3 className="font-semibold text-text">Campaign Type Distribution</h3>
+                  <BarChart3 className="w-4 h-4 text-blue-500" />
+                  <h3 className="font-semibold text-white">Campaign Type Distribution</h3>
                 </div>
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart 
@@ -614,10 +751,10 @@ export default function Analytics() {
                 </ResponsiveContainer>
               </div>
 
-              <div className="bg-surface border border-border rounded-xl p-4">
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-4">
-                  <PieChart className="w-4 h-4 text-primary" />
-                  <h3 className="font-semibold text-text">Winner Conversion Rate</h3>
+                  <PieChart className="w-4 h-4 text-blue-500" />
+                  <h3 className="font-semibold text-white">Winner Conversion Rate</h3>
                 </div>
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart 
@@ -643,21 +780,21 @@ export default function Analytics() {
                 <div className="flex justify-center gap-6 mt-2">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                    <span className="text-sm text-text-secondary">FCFS <span className="font-semibold text-text ml-1">{stats.fcfsConversion}%</span></span>
+                    <span className="text-sm text-gray-300">FCFS <span className="font-semibold text-white ml-1">{stats.fcfsConversion}%</span></span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                    <span className="text-sm text-text-secondary">Raffle <span className="font-semibold text-text ml-1">{stats.raffleConversion}%</span></span>
+                    <span className="text-sm text-gray-300">Raffle <span className="font-semibold text-white ml-1">{stats.raffleConversion}%</span></span>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Campaign Status */}
-            <div className="bg-surface border border-border rounded-xl p-4 mb-6">
+            <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 mb-6">
               <div className="flex items-center gap-2 mb-4">
-                <PieChart className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-text">Campaign Status</h3>
+                <PieChart className="w-4 h-4 text-blue-500" />
+                <h3 className="font-semibold text-white">Campaign Status</h3>
               </div>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart 
@@ -680,36 +817,36 @@ export default function Analytics() {
               <div className="flex justify-center gap-6 mt-2">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                  <span className="text-sm text-text-secondary">Active <span className="font-semibold text-text ml-1">{stats.activeCampaigns}</span></span>
+                  <span className="text-sm text-gray-300">Active <span className="font-semibold text-white ml-1">{stats.activeCampaigns}</span></span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-                  <span className="text-sm text-text-secondary">Completed <span className="font-semibold text-text ml-1">{stats.completedCount}</span></span>
+                  <span className="text-sm text-gray-300">Completed <span className="font-semibold text-white ml-1">{stats.completedCount}</span></span>
                 </div>
               </div>
             </div>
 
             {/* Top Campaigns */}
-            <div className="bg-surface border border-border rounded-xl p-4 mb-6">
+            <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   {topCampaignsType === 'registrants' ? (
-                    <Users className="w-4 h-4 text-primary" />
+                    <Users className="w-4 h-4 text-blue-500" />
                   ) : (
-                    <Trophy className="w-4 h-4 text-warning" />
+                    <Trophy className="w-4 h-4 text-yellow-500" />
                   )}
-                  <h3 className="font-semibold text-text">
+                  <h3 className="font-semibold text-white">
                     Top Campaigns by {topCampaignsType === 'registrants' ? 'Registrants' : 'Winners'}
                   </h3>
                 </div>
                 
-                <div className="flex gap-1 bg-surface-2 rounded-lg p-0.5">
+                <div className="flex gap-1 bg-gray-700 rounded-lg p-0.5">
                   <button
                     onClick={() => setTopCampaignsType('registrants')}
                     className={`px-3 py-1 text-xs rounded-md transition-colors ${
                       topCampaignsType === 'registrants'
-                        ? 'bg-primary text-white'
-                        : 'text-text-secondary hover:text-text'
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-400 hover:text-white'
                     }`}
                   >
                     <Users className="w-3 h-3 inline mr-1" />
@@ -719,8 +856,8 @@ export default function Analytics() {
                     onClick={() => setTopCampaignsType('winners')}
                     className={`px-3 py-1 text-xs rounded-md transition-colors ${
                       topCampaignsType === 'winners'
-                        ? 'bg-primary text-white'
-                        : 'text-text-secondary hover:text-text'
+                        ? 'bg-yellow-600 text-white'
+                        : 'text-gray-400 hover:text-white'
                     }`}
                   >
                     <Trophy className="w-3 h-3 inline mr-1" />
@@ -732,38 +869,38 @@ export default function Analytics() {
               <div className="space-y-3 max-h-[300px] overflow-y-auto">
                 {topCampaignsData.length > 0 ? (
                   topCampaignsData.map((campaign, index) => (
-                    <Link key={campaign.address} to={`/campaign/${campaign.address}`} className="flex items-center justify-between p-2 hover:bg-surface-2 rounded-lg transition-colors">
+                    <Link key={campaign.address} to={`/campaign/${campaign.address}`} className="flex items-center justify-between p-2 hover:bg-gray-700 rounded-lg transition-colors">
                       <div className="flex items-center gap-3">
                         <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center ${
                           index === 0 ? 'bg-yellow-500/20 text-yellow-500' :
                           index === 1 ? 'bg-gray-400/20 text-gray-400' :
                           index === 2 ? 'bg-amber-600/20 text-amber-600' :
-                          'bg-primary/20 text-primary'
+                          'bg-blue-500/20 text-blue-500'
                         }`}>
                           {index + 1}
                         </span>
                         <div>
-                          <p className="text-sm font-medium text-text">{campaign.name}</p>
-                          <p className="text-xs text-text-secondary">{shortAddr(campaign.address)}</p>
+                          <p className="text-sm font-medium text-white">{campaign.name}</p>
+                          <p className="text-xs text-gray-400">{shortAddr(campaign.address)}</p>
                         </div>
                       </div>
                       <div className="text-right">
                         {topCampaignsType === 'registrants' ? (
                           <>
-                            <p className="text-sm font-semibold text-text">{campaign.registrantCount.toLocaleString()}</p>
-                            <p className="text-xs text-text-secondary">registrants</p>
+                            <p className="text-sm font-semibold text-white">{campaign.registrantCount}</p>
+                            <p className="text-xs text-gray-400">registrants</p>
                           </>
                         ) : (
                           <>
-                            <p className="text-sm font-semibold text-warning">{campaign.actualWinnerCount.toLocaleString()}</p>
-                            <p className="text-xs text-text-secondary">winners</p>
+                            <p className="text-sm font-semibold text-yellow-400">{campaign.actualWinnerCount}</p>
+                            <p className="text-xs text-gray-400">winners</p>
                           </>
                         )}
                       </div>
                     </Link>
                   ))
                 ) : (
-                  <p className="text-center text-text-secondary py-4">
+                  <p className="text-center text-gray-400 py-4">
                     {topCampaignsType === 'registrants' 
                       ? 'No campaigns with registrants yet' 
                       : 'No campaigns with winners yet'}
@@ -774,15 +911,15 @@ export default function Analytics() {
           </>
         )}
 
-        {/* All Campaigns Table */}
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-border">
+        {/* All Campaigns Table - Show skeleton rows when loading */}
+        <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-700">
             <div className="flex justify-between items-center flex-wrap gap-3">
-              <h3 className="font-semibold text-text">All Campaigns</h3>
+              <h3 className="font-semibold text-white">All Campaigns</h3>
               
               {!isFirstLoad && (
                 <>
-                  <div className="flex gap-1 bg-surface-2 rounded-lg p-0.5">
+                  <div className="flex gap-1 bg-gray-700 rounded-lg p-0.5">
                     <button
                       onClick={() => {
                         setModeFilter('all')
@@ -790,8 +927,8 @@ export default function Analytics() {
                       }}
                       className={`px-3 py-1 text-xs rounded-md transition-colors ${
                         modeFilter === 'all'
-                          ? 'bg-primary text-white'
-                          : 'text-text-secondary hover:text-text'
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-400 hover:text-white'
                       }`}
                     >
                       All
@@ -803,12 +940,12 @@ export default function Analytics() {
                       }}
                       className={`px-3 py-1 text-xs rounded-md transition-colors ${
                         modeFilter === 'fcfs'
-                          ? 'bg-primary text-white'
-                          : 'text-text-secondary hover:text-text'
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-400 hover:text-white'
                       }`}
                     >
-                      <FCFSIcon />
-                      <span className="ml-1">FCFS</span>
+                      <FCFSIcon className="w-3 h-3 inline mr-1" />
+                      FCFS
                     </button>
                     <button
                       onClick={() => {
@@ -817,16 +954,16 @@ export default function Analytics() {
                       }}
                       className={`px-3 py-1 text-xs rounded-md transition-colors ${
                         modeFilter === 'raffle'
-                          ? 'bg-primary text-white'
-                          : 'text-text-secondary hover:text-text'
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-400 hover:text-white'
                       }`}
                     >
-                      <RaffleIcon />
-                      <span className="ml-1">Raffle</span>
+                      <RaffleIcon className="w-3 h-3 inline mr-1" />
+                      Raffle
                     </button>
                   </div>
                   
-                  <p className="text-xs text-text-secondary">
+                  <p className="text-xs text-gray-400">
                     Total: {sortedAndFilteredCampaigns.length} campaigns
                   </p>
                 </>
@@ -837,12 +974,12 @@ export default function Analytics() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border bg-surface-2">
-                  <th className="text-left py-3 px-4 text-text-secondary font-medium">Campaign</th>
-                  <th className="text-left py-3 px-4 text-text-secondary font-medium">Status</th>
-                  <th className="text-left py-3 px-4 text-text-secondary font-medium">Mode</th>
+                <tr className="border-b border-gray-700 bg-gray-900">
+                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Campaign</th>
+                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Status</th>
+                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Mode</th>
                   <th 
-                    className="text-left py-3 px-4 text-text-secondary font-medium cursor-pointer hover:text-text transition-colors"
+                    className="text-left py-3 px-4 text-gray-400 font-medium cursor-pointer hover:text-white transition-colors"
                     onClick={() => !isFirstLoad && handleSort('registrants')}
                   >
                     <div className="flex items-center gap-1">
@@ -851,7 +988,7 @@ export default function Analytics() {
                     </div>
                   </th>
                   <th 
-                    className="text-left py-3 px-4 text-text-secondary font-medium cursor-pointer hover:text-text transition-colors"
+                    className="text-left py-3 px-4 text-gray-400 font-medium cursor-pointer hover:text-white transition-colors"
                     onClick={() => !isFirstLoad && handleSort('winners')}
                   >
                     <div className="flex items-center gap-1">
@@ -860,7 +997,7 @@ export default function Analytics() {
                     </div>
                   </th>
                   <th 
-                    className="text-left py-3 px-4 text-text-secondary font-medium cursor-pointer hover:text-text transition-colors"
+                    className="text-left py-3 px-4 text-gray-400 font-medium cursor-pointer hover:text-white transition-colors"
                     onClick={() => !isFirstLoad && handleSort('conversion')}
                   >
                     <div className="flex items-center gap-1">
@@ -868,62 +1005,63 @@ export default function Analytics() {
                       {!isFirstLoad && getSortIcon('conversion')}
                     </div>
                   </th>
-                  <th className="text-left py-3 px-4 text-text-secondary font-medium">Created</th>
-                  <th className="text-left py-3 px-4 text-text-secondary font-medium">Actions</th>
+                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Created</th>
+                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+                            <tbody>
                 {isFirstLoad ? (
+                  // Show 5 skeleton rows while loading
                   Array(5).fill(0).map((_, i) => <TableRowSkeleton key={i} />)
                 ) : (
                   <>
                     {currentCampaigns.map((campaign) => (
-                      <tr key={campaign.address} className="border-b border-border hover:bg-surface-2 transition-colors">
+                      <tr key={campaign.address} className="border-b border-gray-700 hover:bg-gray-700 transition-colors">
                         <td className="py-3 px-4">
-                          <p className="font-medium text-text">{campaign.name}</p>
-                          <p className="text-xs text-text-secondary">{shortAddr(campaign.address)}</p>
+                          <p className="font-medium text-white">{campaign.name}</p>
+                          <p className="text-xs text-gray-400">{shortAddr(campaign.address)}</p>
                         </td>
                         <td className="py-3 px-4">
-                          {campaign.isActive && !campaign.isCompleted ? (
-                            <div className="flex items-center gap-1 text-success">
+                          {campaign.isActive ? (
+                            <div className="flex items-center gap-1 text-green-500">
                               <LiveIcon />
                               <span className="text-xs">Live</span>
                             </div>
                           ) : campaign.isCompleted ? (
-                            <div className="flex items-center gap-1 text-warning">
+                            <div className="flex items-center gap-1 text-orange-400">
                               <CompletedIcon />
                               <span className="text-xs">Completed</span>
                             </div>
                           ) : (
-                            <span className="text-xs text-text-secondary">Ended</span>
+                            <span className="text-xs text-gray-400">Ended</span>
                           )}
                         </td>
                         <td className="py-3 px-4">
-                          <div className="flex items-center gap-1 text-text-secondary">
+                          <div className="flex items-center gap-1 text-gray-400">
                             {campaign.isRaffle ? <RaffleIcon /> : <FCFSIcon />}
                             <span className="text-xs">{campaign.isRaffle ? 'Raffle' : 'FCFS'}</span>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-text">{campaign.registrantCount.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-white">{campaign.registrantCount.toLocaleString()}</td>
                         <td className="py-3 px-4">
-                          <span className="text-warning font-medium">{campaign.actualWinnerCount.toLocaleString()}</span>
+                          <span className="text-yellow-400 font-medium">{campaign.actualWinnerCount.toLocaleString()}</span>
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2">
                             <div className="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
                               <div 
-                                className="h-full bg-success rounded-full"
+                                className="h-full bg-green-500 rounded-full"
                                 style={{ width: `${campaign.conversionRate}%` }}
                               />
                             </div>
-                            <span className="text-xs text-text-secondary">{campaign.conversionRate.toFixed(1)}%</span>
+                            <span className="text-xs text-gray-400">{campaign.conversionRate.toFixed(1)}%</span>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-text-secondary">
+                        <td className="py-3 px-4 text-gray-400">
                           {new Date((campaign.createdAt || 0) * 1000).toLocaleDateString()}
                         </td>
                         <td className="py-3 px-4">
-                          <Link to={`/campaign/${campaign.address}`} className="text-primary hover:underline text-xs">
+                          <Link to={`/campaign/${campaign.address}`} className="text-blue-500 hover:underline text-xs">
                             View
                           </Link>
                         </td>
@@ -931,7 +1069,7 @@ export default function Analytics() {
                     ))}
                     {sortedAndFilteredCampaigns.length === 0 && !isFirstLoad && (
                       <tr>
-                        <td colSpan={8} className="py-8 text-center text-text-secondary">No campaigns found</td>
+                        <td colSpan={8} className="py-8 text-center text-gray-400">No campaigns found</td>
                       </tr>
                     )}
                   </>
@@ -940,10 +1078,10 @@ export default function Analytics() {
             </table>
           </div>
           
-          {/* Pagination */}
+          {/* Pagination - only show when not first loading */}
           {!isFirstLoad && totalPages > 1 && (
-            <div className="px-4 py-3 border-t border-border flex items-center justify-between flex-wrap gap-2">
-              <div className="text-xs text-text-secondary">
+            <div className="px-4 py-3 border-t border-gray-700 flex items-center justify-between flex-wrap gap-2">
+              <div className="text-xs text-gray-400">
                 Showing {startIndex + 1} to {Math.min(endIndex, sortedAndFilteredCampaigns.length)} of {sortedAndFilteredCampaigns.length} campaigns
               </div>
               <div className="flex items-center gap-2">
@@ -952,8 +1090,8 @@ export default function Analytics() {
                   disabled={safeCurrentPage === 1}
                   className={`p-2 rounded-lg transition-colors ${
                     safeCurrentPage === 1 
-                      ? 'text-text-secondary cursor-not-allowed opacity-50' 
-                      : 'text-text-secondary hover:text-text hover:bg-surface-2'
+                      ? 'text-gray-600 cursor-not-allowed' 
+                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
                   }`}
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -977,8 +1115,8 @@ export default function Analytics() {
                         onClick={() => goToPage(pageNum)}
                         className={`w-8 h-8 rounded-lg text-sm transition-colors ${
                           safeCurrentPage === pageNum
-                            ? 'bg-primary text-white'
-                            : 'text-text-secondary hover:text-text hover:bg-surface-2'
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-400 hover:text-white hover:bg-gray-700'
                         }`}
                       >
                         {pageNum}
@@ -991,8 +1129,8 @@ export default function Analytics() {
                   disabled={safeCurrentPage === totalPages}
                   className={`p-2 rounded-lg transition-colors ${
                     safeCurrentPage === totalPages 
-                      ? 'text-text-secondary cursor-not-allowed opacity-50' 
-                      : 'text-text-secondary hover:text-text hover:bg-surface-2'
+                      ? 'text-gray-600 cursor-not-allowed' 
+                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
                   }`}
                 >
                   <ChevronRight className="w-4 h-4" />
